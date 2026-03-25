@@ -1,5 +1,6 @@
 const path = require('path');
 const db = require('../config/db');
+const { buildUploadPublicPath } = require('../config/uploads');
 const { getIO } = require('../websocket/socket');
 
 const ACTIVITY_TYPES = ['Patrol', 'Incident', 'Mistake', 'ShiftStart', 'ShiftEnd'];
@@ -32,7 +33,7 @@ const formatDateTime = (value) => {
 };
 
 const buildUploadedFilePayload = (req, file) => {
-    const relativePath = `/${path.relative(path.join(__dirname, '../../'), file.path).replace(/\\/g, '/')}`;
+    const relativePath = buildUploadPublicPath(file.path);
     return {
         file_name: file.filename,
         file_path: relativePath,

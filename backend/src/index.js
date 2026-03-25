@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const http = require('http');
 const path = require('path');
 const { initWebSocket } = require('./websocket/socket');
+const { uploadsRoot, ensureUploadsRoot } = require('./config/uploads');
 
 dotenv.config();
 require('./config/db');
@@ -17,7 +18,8 @@ initWebSocket(server);
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+ensureUploadsRoot();
+app.use('/uploads', express.static(uploadsRoot));
 
 // Routes
 const authRoutes = require('./routes/authRoutes');

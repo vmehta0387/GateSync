@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { getIO } = require('../websocket/socket');
 const { sendBulkSms } = require('../services/smsService');
 const { sendPushToFlatResidents, sendPushToFlatApprovalResidents, sendPushToSocietyGuards } = require('../services/pushNotificationService');
+const { buildUploadPublicPath } = require('../config/uploads');
 
 const VISITOR_TYPES = ['Guest', 'Delivery', 'Cab', 'Service', 'Unknown'];
 const DEFAULT_RULES = {
@@ -118,7 +119,7 @@ const getSocietyRules = async (societyId) => {
 };
 
 const buildUploadedFilePayload = (req, file) => {
-    const relativePath = `/${path.relative(path.join(__dirname, '../../'), file.path).replace(/\\/g, '/')}`;
+    const relativePath = buildUploadPublicPath(file.path);
     return {
         file_name: file.filename,
         file_path: relativePath,

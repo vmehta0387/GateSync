@@ -92,6 +92,7 @@ DB_PORT=3306
 DB_USER=admin
 DB_PASSWORD=REPLACE_WITH_RDS_PASSWORD
 DB_NAME=gatepulse
+UPLOADS_ROOT=/var/app-data/gatesync/uploads
 JWT_SECRET=REPLACE_WITH_STRONG_SECRET
 OPENAI_API_KEY=your_openai_api_key_here
 ```
@@ -99,6 +100,31 @@ OPENAI_API_KEY=your_openai_api_key_here
 Important:
 - `DB_NAME` should currently be `gatepulse`
 - remove any duplicate `DB_*` lines
+
+## 6A. Persistent Upload Storage
+
+Do not keep uploads inside the repo directory.
+
+Create a persistent folder on EC2:
+
+```bash
+sudo mkdir -p /var/app-data/gatesync/uploads
+sudo chown -R ubuntu:ubuntu /var/app-data/gatesync
+```
+
+Backend now serves this folder at:
+
+- `/uploads/...`
+
+That means uploaded files stay on EC2 disk outside `/var/www/gatesync`, so normal code pulls and repo updates do not wipe them.
+
+Examples:
+
+- visitor photos
+- staff photos and ID documents
+- complaint attachments
+- communication files
+- security incident evidence
 
 ## 7. Install Dependencies
 

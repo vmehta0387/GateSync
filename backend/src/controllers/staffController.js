@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const path = require('path');
+const { buildUploadPublicPath } = require('../config/uploads');
 
 const STAFF_TYPES = ['Maid', 'Cook', 'Driver', 'Cleaner', 'Helper', 'Security', 'Electrician', 'Plumber', 'Other'];
 const ID_TYPES = ['Aadhaar', 'PAN', 'Passport'];
@@ -67,7 +68,7 @@ function mapFlatRow(row) {
 }
 
 function buildUploadedFilePayload(req, file) {
-    const relativePath = `/${path.relative(path.join(__dirname, '../../'), file.path).replace(/\\/g, '/')}`;
+    const relativePath = buildUploadPublicPath(file.path);
     return {
         file_name: file.filename,
         file_path: relativePath,

@@ -1,8 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-
-const uploadsRoot = path.join(__dirname, '../../uploads');
+const { uploadsRoot, ensureUploadsRoot } = require('../config/uploads');
 
 function ensureDirectory(directoryPath) {
     fs.mkdirSync(directoryPath, { recursive: true });
@@ -16,6 +15,7 @@ function createStorage(subdirectory) {
     return multer.diskStorage({
         destination: (req, file, callback) => {
             const destinationPath = path.join(uploadsRoot, subdirectory);
+            ensureUploadsRoot();
             ensureDirectory(destinationPath);
             callback(null, destinationPath);
         },

@@ -1,5 +1,6 @@
 const path = require('path');
 const db = require('../config/db');
+const { buildUploadPublicPath } = require('../config/uploads');
 
 const NOTICE_TYPES = ['General', 'Urgent', 'Event', 'Maintenance', 'Emergency'];
 const AUDIENCE_TYPES = ['AllResidents', 'Tower', 'flats', 'Occupancy', 'Defaulters', 'Committee', 'Guards', 'CustomUsers'];
@@ -36,7 +37,7 @@ const formatDateTime = (value) => {
 };
 
 const buildUploadedFilePayload = (req, file) => {
-    const relativePath = `/${path.relative(path.join(__dirname, '../../'), file.path).replace(/\\/g, '/')}`;
+    const relativePath = buildUploadPublicPath(file.path);
     return {
         file_name: file.filename,
         file_path: relativePath,
