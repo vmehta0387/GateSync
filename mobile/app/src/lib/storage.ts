@@ -4,11 +4,17 @@ import { StoredSession } from '../types/auth';
 const SESSION_KEY = 'gatesync_mobile_session';
 const INSTALLATION_ID_KEY = 'gatesync_mobile_installation_id';
 const PUSH_REGISTRATION_KEY = 'gatesync_mobile_push_registration';
+const BIOMETRIC_SETTINGS_KEY = 'gatesync_mobile_biometric_settings';
 
 type PushRegistration = {
   expoPushToken: string;
   installationId: string;
   userId: number;
+};
+
+type BiometricSettings = {
+  enabled: boolean;
+  prompted: boolean;
 };
 
 export async function readStoredSession() {
@@ -30,6 +36,27 @@ export async function writeStoredSession(session: StoredSession) {
 
 export async function clearStoredSession() {
   await SecureStore.deleteItemAsync(SESSION_KEY);
+}
+
+export async function readBiometricSettings(): Promise<BiometricSettings> {
+  const raw = await SecureStore.getItemAsync(BIOMETRIC_SETTINGS_KEY);
+  if (!raw) {
+    return { enabled: false, prompted: false };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<BiometricSettings>;
+    return {
+      enabled: Boolean(parsed.enabled),
+      prompted: Boolean(parsed.prompted),
+    };
+  } catch {
+    return { enabled: false, prompted: false };
+  }
+}
+
+export async function writeBiometricSettings(settings: BiometricSettings) {
+  await SecureStore.setItemAsync(BIOMETRIC_SETTINGS_KEY, JSON.stringify(settings));
 }
 
 function createInstallationId() {

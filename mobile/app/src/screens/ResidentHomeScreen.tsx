@@ -139,6 +139,23 @@ export function ResidentHomeScreen({
           <Text style={styles.title}>Welcome, {residentName}</Text>
         </View>
 
+        {pendingApprovals.length ? (
+          <Pressable style={styles.approvalHeroCard} onPress={() => onNavigate('visitors')}>
+            <View style={styles.approvalHeroHeader}>
+              <View style={styles.approvalHeroCopy}>
+                <Text style={styles.approvalHeroEyebrow}>Approval pending</Text>
+                <Text style={styles.approvalHeroTitle}>
+                  {pendingApprovals.length} visitor {pendingApprovals.length === 1 ? 'request is' : 'requests are'} waiting
+                </Text>
+                <Text style={styles.approvalHeroDetail}>
+                  {pendingApprovals.slice(0, 2).map((log) => `${log.visitor_name} for ${log.block_name}-${log.flat_number}`).join(' • ')}
+                </Text>
+              </View>
+              <Badge label="Review now" tone="warning" />
+            </View>
+          </Pressable>
+        ) : null}
+
         <View style={styles.categoryRow}>
           {quickCategories.map((item) => (
             <Pressable key={item.code} onPress={() => handleAction(item)} style={[styles.categoryCard, item.tone === 'primary' ? styles.categoryCardPrimary : null]}>
@@ -352,6 +369,41 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     lineHeight: 28,
+  },
+  approvalHeroCard: {
+    borderRadius: 24,
+    backgroundColor: '#fff4e3',
+    borderWidth: 1,
+    borderColor: '#ffd79a',
+    padding: 16,
+  },
+  approvalHeroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  approvalHeroCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  approvalHeroEyebrow: {
+    color: '#a15c00',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  approvalHeroTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  approvalHeroDetail: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
   },
   categoryRow: {
     flexDirection: 'row',

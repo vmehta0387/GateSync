@@ -80,9 +80,13 @@ function buildUploadedFilePayload(req, file) {
 
 async function getSocietyFlats(societyId) {
     const [flats] = await db.query(
-        `SELECT id, block_name, flat_number
-         FROM flats
-         WHERE society_id = ?
+        `SELECT DISTINCT f.id, f.block_name, f.flat_number
+         FROM flats f
+         INNER JOIN user_flats uf ON uf.flat_id = f.id
+         INNER JOIN users u ON u.id = uf.user_id
+         WHERE f.society_id = ?
+           AND u.role = 'RESIDENT'
+           AND UPPER(u.status) = 'ACTIVE'
          ORDER BY block_name ASC, flat_number ASC`,
         [societyId]
     );

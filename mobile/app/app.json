@@ -51,6 +51,12 @@
         {
           "cameraPermission": "Allow GateSync to capture visitor photos and attach complaint images."
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow GateSync to use Face ID to unlock your session on this device."
+        }
       ]
     ],
     "extra": {
