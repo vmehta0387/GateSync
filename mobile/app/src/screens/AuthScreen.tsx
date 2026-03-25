@@ -3,6 +3,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -253,10 +254,6 @@ export function AuthScreen() {
                     {submitting ? 'Please wait...' : 'Continue Securely  ->'}
                   </Text>
                 </Pressable>
-
-                <Text style={[styles.legalText, responsiveStyles.legalText]}>
-                  By confirming, you agree to our <Text style={styles.legalLink}>Terms of Service</Text> &amp; <Text style={styles.legalLink}>Privacy Policy</Text>.
-                </Text>
               </View>
             ) : (
               <View style={[styles.formSection, responsiveStyles.formSection]}>
@@ -291,6 +288,17 @@ export function AuthScreen() {
                 </Pressable>
               </View>
             )}
+
+            <Text style={[styles.legalText, responsiveStyles.legalText]}>
+              By using GateSync, you agree to our{' '}
+              <Text style={styles.legalLink} onPress={() => void Linking.openURL('https://gatesync.in/terms')}>
+                Terms of Service
+              </Text>{' '}
+              &amp;{' '}
+              <Text style={styles.legalLink} onPress={() => void Linking.openURL('https://gatesync.in/privacy')}>
+                Privacy Policy
+              </Text>.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSession } from '../providers/SessionProvider';
 import { colors } from '../theme';
 
@@ -42,6 +42,13 @@ export function ResidentProfileScreen() {
         <Pressable onPress={() => void signOut()} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Log Out</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.footerPanel}>
+        <Pressable onPress={() => void Linking.openURL('https://gatesync.in/privacy')} style={styles.footerLink}>
+          <Text style={styles.footerLinkText}>Privacy Policy</Text>
+        </Pressable>
+        <Text style={styles.versionLabel}>Version 1.0.0 (Release)</Text>
       </View>
     </View>
   );
@@ -163,5 +170,24 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 14,
     fontWeight: '800',
+  },
+  footerPanel: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerLink: {
+    padding: 8,
+  },
+  footerLinkText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  versionLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

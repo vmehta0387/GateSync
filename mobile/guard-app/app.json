@@ -12,7 +12,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gatesync.guard"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,6 +22,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "package": "com.gatesync.guard",
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -36,8 +38,8 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "http://192.168.1.100:5000",
-      "socketUrl": "http://192.168.1.100:5000"
+      "apiBaseUrl": "https://api.gatesync.in",
+      "socketUrl": "https://api.gatesync.in"
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { API_BASE_URL, SOCKET_URL } from '../config/env';
 import { useSession } from '../providers/SessionProvider';
 import { colors } from '../theme';
@@ -53,6 +53,13 @@ export function ProfileScreen() {
       >
         <Text style={styles.secondaryButtonText}>What comes next?</Text>
       </Pressable>
+
+      <View style={styles.footer}>
+        <Pressable onPress={() => void Linking.openURL('https://gatesync.in/privacy')}>
+          <Text style={styles.footerLink}>Privacy Policy</Text>
+        </Pressable>
+        <Text style={styles.versionLabel}>Version 1.0.0</Text>
+      </View>
     </View>
   );
 }
@@ -172,5 +179,21 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: '800',
+  },
+  footer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerLink: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  versionLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

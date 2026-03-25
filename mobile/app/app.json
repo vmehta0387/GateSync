@@ -12,7 +12,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gatesync.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -62,7 +63,7 @@
     "extra": {
       "apiBaseUrl": "https://api.gatesync.in",
       "socketUrl": "https://api.gatesync.in",
-      "projectId": "REPLACE_WITH_EXPO_PROJECT_ID",
+      "projectId": "c478175f-ff42-41fa-8b7d-428dde378c22",
       "eas": {
         "projectId": "c478175f-ff42-41fa-8b7d-428dde378c22"
       }
