@@ -5,7 +5,7 @@ async function seedAdmin() {
     try {
         const adminPhone = '9999999999';
         // Use INSERT IGNORE to prevent duplicate errors if run multiple times
-        await db.query("INSERT IGNORE INTO Users (phone_number, role, status) VALUES (?, 'ADMIN', 'ACTIVE')", [adminPhone]);
+        await db.query("INSERT IGNORE INTO users (phone_number, role, status) VALUES (?, 'ADMIN', 'ACTIVE')", [adminPhone]);
         console.log('Successfully seeded admin user with phone number:', adminPhone);
         process.exit(0);
     } catch (err) {

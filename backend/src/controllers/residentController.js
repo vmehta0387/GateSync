@@ -29,7 +29,7 @@ exports.getResidentById = async (req, res) => {
     try {
         const { id } = req.params;
         const [users] = await db.query(
-            'SELECT * FROM Users WHERE id = ? AND society_id = ?',
+            'SELECT * FROM users WHERE id = ? AND society_id = ?',
             [id, req.user.society_id]
         );
         if (users.length === 0) {
@@ -38,18 +38,18 @@ exports.getResidentById = async (req, res) => {
 
         const user = users[0];
         const [flats] = await db.query(
-            'SELECT uf.*, f.block_name, f.flat_number, f.flat_type FROM User_Flats uf JOIN Flats f ON uf.flat_id = f.id WHERE uf.user_id = ?',
+            'SELECT uf.*, f.block_name, f.flat_number, f.flat_type FROM user_flats uf JOIN flats f ON uf.flat_id = f.id WHERE uf.user_id = ?',
             [id]
         );
         const flatData = flats[0] || {};
 
         const [vehicles] = await db.query(
-            'SELECT vehicle_type, vehicle_number, parking_slot FROM Vehicles WHERE user_id = ?',
+            'SELECT vehicle_type, vehicle_number, parking_slot FROM vehicles WHERE user_id = ?',
             [id]
         );
 
         const [familyRows] = await db.query(
-            'SELECT name, age, relation, phone FROM Family_Members WHERE user_id = ?',
+            'SELECT name, age, relation, phone FROM family_members WHERE user_id = ?',
             [id]
         );
         const family = familyRows.map((member) => ({
@@ -113,9 +113,9 @@ exports.getResidents = async (req, res) => {
         const [residents] = await db.query(`
             SELECT u.id, u.name, u.email, u.phone_number, UPPER(u.status) AS status, u.kyc_status,
                    uf.flat_id, COALESCE(uf.type, 'Unassigned') as occupancy_type, f.block_name, f.flat_number
-            FROM Users u
-            LEFT JOIN User_Flats uf ON u.id = uf.user_id
-            LEFT JOIN Flats f ON uf.flat_id = f.id
+            FROM users u
+            LEFT JOIN user_flats uf ON u.id = uf.user_id
+            LEFT JOIN flats f ON uf.flat_id = f.id
             WHERE u.society_id = ? AND u.role = 'RESIDENT'
             ORDER BY u.name ASC
         `, [req.user.society_id]);
@@ -130,8 +130,8 @@ exports.getMyFlats = async (req, res) => {
     try {
         const [flats] = await db.query(`
             SELECT uf.flat_id, uf.type, f.block_name, f.flat_number
-            FROM User_Flats uf
-            JOIN Flats f ON uf.flat_id = f.id
+            FROM user_flats uf
+            JOIN flats f ON uf.flat_id = f.id
             WHERE uf.user_id = ?
             ORDER BY f.block_name, f.flat_number
         `, [req.user.id]);
@@ -147,7 +147,7 @@ exports.getImportantContacts = async (req, res) => {
     try {
         const [admins] = await db.query(
             `SELECT id, name, phone_number, role
-             FROM Users
+             FROM users
              WHERE society_id = ? AND role = 'ADMIN' AND status = 'ACTIVE'
              ORDER BY created_at ASC, id ASC`,
             [req.user.society_id]
@@ -155,7 +155,7 @@ exports.getImportantContacts = async (req, res) => {
 
         const [managers] = await db.query(
             `SELECT id, name, phone_number, role
-             FROM Users
+             FROM users
              WHERE society_id = ? AND role = 'MANAGER' AND status = 'ACTIVE'
              ORDER BY created_at ASC, id ASC`,
             [req.user.society_id]
@@ -171,7 +171,7 @@ exports.getImportantContacts = async (req, res) => {
                 s.shift_timing,
                 s.work_start_time,
                 s.work_end_time
-             FROM Staff s
+             FROM staff s
              WHERE s.society_id = ?
                AND s.is_blacklisted = 0
                AND s.type IN ('Security', 'Cleaner', 'Plumber', 'Electrician')
@@ -248,14 +248,14 @@ exports.addResident = async (req, res) => {
         const c_bills = permissionSource.can_view_bills ?? true;
         const c_complaints = permissionSource.can_raise_complaints ?? true;
 
-        const [users] = await db.query('SELECT id FROM Users WHERE phone_number = ?', [phone_number]);
+        const [users] = await db.query('SELECT id FROM users WHERE phone_number = ?', [phone_number]);
         let userId;
 
         if (users.length > 0) {
             userId = users[0].id;
         } else {
             const [userResult] = await db.query(`
-                INSERT INTO Users (
+                INSERT INTO users (
                     society_id, name, email, phone_number, role, kyc_status,
                     id_type, id_number, id_proof_url,
                     emergency_name, emergency_relation, emergency_phone,
@@ -274,20 +274,20 @@ exports.addResident = async (req, res) => {
 
         if (!flat_id && block_name && flat_number) {
             const [flats] = await db.query(
-                'SELECT id FROM Flats WHERE society_id = ? AND block_name = ? AND flat_number = ?',
+                'SELECT id FROM flats WHERE society_id = ? AND block_name = ? AND flat_number = ?',
                 [req.user.society_id, block_name, flat_number]
             );
             if (flats.length > 0) {
                 flat_id = flats[0].id;
                 if (flat_type) {
                     await db.query(
-                        'UPDATE Flats SET flat_type = ? WHERE id = ? AND society_id = ?',
+                        'UPDATE flats SET flat_type = ? WHERE id = ? AND society_id = ?',
                         [flat_type, flat_id, req.user.society_id]
                     );
                 }
             } else {
                 const [flatResult] = await db.query(
-                    'INSERT INTO Flats (society_id, block_name, flat_number, flat_type) VALUES (?, ?, ?, ?)',
+                    'INSERT INTO flats (society_id, block_name, flat_number, flat_type) VALUES (?, ?, ?, ?)',
                     [req.user.society_id, block_name, flat_number, flat_type]
                 );
                 flat_id = flatResult.insertId;
@@ -298,9 +298,9 @@ exports.addResident = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Flat information (Tower/Flat Number) is required' });
         }
 
-        await db.query('DELETE FROM User_Flats WHERE user_id = ?', [userId]);
+        await db.query('DELETE FROM user_flats WHERE user_id = ?', [userId]);
         await db.query(`
-            INSERT INTO User_Flats (user_id, flat_id, type, move_in_date, move_out_date)
+            INSERT INTO user_flats (user_id, flat_id, type, move_in_date, move_out_date)
             VALUES (?, ?, ?, ?, ?)
         `, [userId, flat_id, occupancy_type, move_in_date, move_out_date]);
 
@@ -308,7 +308,7 @@ exports.addResident = async (req, res) => {
             for (const vehicle of payload.vehicles) {
                 if (!vehicle.vehicle_number) continue;
                 await db.query(`
-                    INSERT INTO Vehicles (user_id, flat_id, vehicle_type, vehicle_number, parking_slot)
+                    INSERT INTO vehicles (user_id, flat_id, vehicle_type, vehicle_number, parking_slot)
                     VALUES (?, ?, ?, ?, ?)
                 `, [userId, flat_id, vehicle.vehicle_type || 'Car', vehicle.vehicle_number, vehicle.parking_slot || null]);
             }
@@ -318,7 +318,7 @@ exports.addResident = async (req, res) => {
             for (const member of payload.family) {
                 if (!member.name) continue;
                 await db.query(`
-                    INSERT INTO Family_Members (user_id, name, age, relation, phone)
+                    INSERT INTO family_members (user_id, name, age, relation, phone)
                     VALUES (?, ?, ?, ?, ?)
                 `, [userId, member.name, member.age || null, member.relation || null, member.phone || member.phone_number || null]);
             }
@@ -353,7 +353,7 @@ exports.updateResident = async (req, res) => {
         const permissionSource = permissions || access || {};
 
         if (status || kyc_status || (!basic && (name || email || phone_number))) {
-            let query = 'UPDATE Users SET ';
+            let query = 'UPDATE users SET ';
             const updates = [];
             const queryParams = [];
 
@@ -392,7 +392,7 @@ exports.updateResident = async (req, res) => {
             const moveOutDate = normalizeResidentDate(flat?.move_out_date);
 
             await db.query(`
-                UPDATE Users SET
+                UPDATE users SET
                     name = ?, phone_number = ?, email = ?,
                     id_type = ?, id_number = ?, id_proof_url = ?,
                     emergency_name = ?, emergency_relation = ?, emergency_phone = ?,
@@ -410,53 +410,53 @@ exports.updateResident = async (req, res) => {
 
             if (flat && flat.block_name && flat.flat_number) {
                 const [existingFlat] = await db.query(
-                    'SELECT id FROM Flats WHERE society_id = ? AND block_name = ? AND flat_number = ?',
+                    'SELECT id FROM flats WHERE society_id = ? AND block_name = ? AND flat_number = ?',
                     [req.user.society_id, flat.block_name, flat.flat_number]
                 );
 
                 if (existingFlat.length > 0) {
                     flatIdResolved = existingFlat[0].id;
                     await db.query(
-                        'UPDATE Flats SET flat_type = ? WHERE id = ? AND society_id = ?',
+                        'UPDATE flats SET flat_type = ? WHERE id = ? AND society_id = ?',
                         [flat.flat_type || null, flatIdResolved, req.user.society_id]
                     );
                 } else {
                     const [flatResult] = await db.query(
-                        'INSERT INTO Flats (society_id, block_name, flat_number, flat_type) VALUES (?, ?, ?, ?)',
+                        'INSERT INTO flats (society_id, block_name, flat_number, flat_type) VALUES (?, ?, ?, ?)',
                         [req.user.society_id, flat.block_name, flat.flat_number, flat.flat_type || null]
                     );
                     flatIdResolved = flatResult.insertId;
                 }
 
-                await db.query('DELETE FROM User_Flats WHERE user_id = ?', [id]);
+                await db.query('DELETE FROM user_flats WHERE user_id = ?', [id]);
                 await db.query(
-                    'INSERT INTO User_Flats (user_id, flat_id, type, move_in_date, move_out_date) VALUES (?, ?, ?, ?, ?)',
+                    'INSERT INTO user_flats (user_id, flat_id, type, move_in_date, move_out_date) VALUES (?, ?, ?, ?, ?)',
                     [id, flatIdResolved, flat.occupancy_type || 'Owner', moveInDate, moveOutDate]
                 );
             }
 
             if (!flatIdResolved) {
-                const [existingUserFlat] = await db.query('SELECT flat_id FROM User_Flats WHERE user_id = ? LIMIT 1', [id]);
+                const [existingUserFlat] = await db.query('SELECT flat_id FROM user_flats WHERE user_id = ? LIMIT 1', [id]);
                 flatIdResolved = existingUserFlat[0]?.flat_id || null;
             }
 
-            await db.query('DELETE FROM Vehicles WHERE user_id = ?', [id]);
+            await db.query('DELETE FROM vehicles WHERE user_id = ?', [id]);
             if (vehicles && Array.isArray(vehicles) && flatIdResolved) {
                 for (const vehicle of vehicles) {
                     if (!vehicle.vehicle_number) continue;
                     await db.query(
-                        'INSERT INTO Vehicles (user_id, flat_id, vehicle_type, vehicle_number, parking_slot) VALUES (?, ?, ?, ?, ?)',
+                        'INSERT INTO vehicles (user_id, flat_id, vehicle_type, vehicle_number, parking_slot) VALUES (?, ?, ?, ?, ?)',
                         [id, flatIdResolved, vehicle.vehicle_type || 'Car', vehicle.vehicle_number, vehicle.parking_slot || null]
                     );
                 }
             }
 
-            await db.query('DELETE FROM Family_Members WHERE user_id = ?', [id]);
+            await db.query('DELETE FROM family_members WHERE user_id = ?', [id]);
             if (family && Array.isArray(family)) {
                 for (const member of family) {
                     if (!member.name) continue;
                     await db.query(
-                        'INSERT INTO Family_Members (user_id, name, age, relation, phone) VALUES (?, ?, ?, ?, ?)',
+                        'INSERT INTO family_members (user_id, name, age, relation, phone) VALUES (?, ?, ?, ?, ?)',
                         [id, member.name, member.age || null, member.relation || null, member.phone || member.phone_number || null]
                     );
                 }
@@ -476,7 +476,7 @@ exports.removeResidentMapping = async (req, res) => {
     try {
         const { id } = req.params;
         const { flat_id } = req.body;
-        await db.query('DELETE FROM User_Flats WHERE user_id = ? AND flat_id = ?', [id, flat_id]);
+        await db.query('DELETE FROM user_flats WHERE user_id = ? AND flat_id = ?', [id, flat_id]);
         return res.status(200).json({ success: true, message: 'Resident removed from flat' });
     } catch (error) {
         console.error('removeResident error:', error);

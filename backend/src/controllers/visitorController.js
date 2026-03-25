@@ -59,7 +59,7 @@ const resolveFlatId = async ({ flat_id, block_name, flat_number, society_id }) =
     }
 
     const [flats] = await db.query(
-        'SELECT id FROM Flats WHERE society_id = ? AND block_name = ? AND flat_number = ?',
+        'SELECT id FROM flats WHERE society_id = ? AND block_name = ? AND flat_number = ?',
         [society_id, block_name, flat_number]
     );
 
@@ -73,7 +73,7 @@ const resolveFlatTargets = async ({ flat_ids, flat_id, block_name, flat_number, 
         const placeholders = requestedFlatIds.map(() => '?').join(', ');
         const [rows] = await db.query(
             `SELECT id, block_name, flat_number
-             FROM Flats
+             FROM flats
              WHERE society_id = ? AND id IN (${placeholders})`,
             [society_id, ...requestedFlatIds]
         );
@@ -99,7 +99,7 @@ const resolveFlatTargets = async ({ flat_ids, flat_id, block_name, flat_number, 
 
     const [rows] = await db.query(
         `SELECT id, block_name, flat_number
-         FROM Flats
+         FROM flats
          WHERE id = ? AND society_id = ?
          LIMIT 1`,
         [resolvedFlatId, society_id]
@@ -110,7 +110,7 @@ const resolveFlatTargets = async ({ flat_ids, flat_id, block_name, flat_number, 
 
 const getSocietyRules = async (societyId) => {
     const [rows] = await db.query(
-        'SELECT config_settings FROM Societies WHERE id = ?',
+        'SELECT config_settings FROM societies WHERE id = ?',
         [societyId]
     );
 
@@ -224,7 +224,7 @@ const validatePreApprovedPayload = (payload) => {
 const ensureVisitor = async ({ society_id, name, phone_number, visitor_photo_url }) => {
     const [visitors] = await db.query(
         `SELECT id, is_blacklisted, is_watchlisted, watchlist_reason
-         FROM Visitors
+         FROM visitors
          WHERE society_id = ? AND phone_number = ?`,
         [society_id, phone_number]
     );
@@ -237,7 +237,7 @@ const ensureVisitor = async ({ society_id, name, phone_number, visitor_photo_url
         }
 
         await db.query(
-            `UPDATE Visitors
+            `UPDATE visitors
              SET name = ?, photo_url = COALESCE(?, photo_url)
              WHERE id = ?`,
             [name, visitor_photo_url, visitor.id]
@@ -251,7 +251,7 @@ const ensureVisitor = async ({ society_id, name, phone_number, visitor_photo_url
     }
 
     const [result] = await db.query(
-        `INSERT INTO Visitors (name, phone_number, society_id, photo_url)
+        `INSERT INTO visitors (name, phone_number, society_id, photo_url)
          VALUES (?, ?, ?, ?)`,
         [name, phone_number, society_id, visitor_photo_url]
     );
@@ -265,7 +265,7 @@ const ensureVisitor = async ({ society_id, name, phone_number, visitor_photo_url
 
 const requireResidentFlatAccess = async (userId, flatId) => {
     const [rows] = await db.query(
-        'SELECT flat_id FROM User_Flats WHERE user_id = ? AND flat_id = ?',
+        'SELECT flat_id FROM user_flats WHERE user_id = ? AND flat_id = ?',
         [userId, flatId]
     );
 
@@ -275,8 +275,8 @@ const requireResidentFlatAccess = async (userId, flatId) => {
 const getFlatResidentUserIds = async (flatId) => {
     const [rows] = await db.query(
         `SELECT DISTINCT u.id
-         FROM User_Flats uf
-         INNER JOIN Users u ON u.id = uf.user_id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
          WHERE uf.flat_id = ? AND u.role = 'RESIDENT'`,
         [flatId]
     );
@@ -287,8 +287,8 @@ const getFlatResidentUserIds = async (flatId) => {
 const getFlatResidentNotificationTargets = async (flatId) => {
     const [rows] = await db.query(
         `SELECT DISTINCT u.id, u.phone_number
-         FROM User_Flats uf
-         INNER JOIN Users u ON u.id = uf.user_id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
          WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND COALESCE(u.sms_alerts, 0) = 1`,
         [flatId]
     );
@@ -370,9 +370,9 @@ const applyVisitorDecision = async ({ logId, nextStatus, approvalType = 'Manual'
             vl.purpose,
             f.block_name,
             f.flat_number
-         FROM Visitor_Logs vl
-         JOIN Visitors v ON v.id = vl.visitor_id
-         JOIN Flats f ON f.id = vl.flat_id
+         FROM visitor_logs vl
+         JOIN visitors v ON v.id = vl.visitor_id
+         JOIN flats f ON f.id = vl.flat_id
          WHERE vl.id = ? AND vl.status = 'Pending'`,
         [logId]
     );
@@ -387,7 +387,7 @@ const applyVisitorDecision = async ({ logId, nextStatus, approvalType = 'Manual'
         : nextStatus;
 
     await db.query(
-        `UPDATE Visitor_Logs
+        `UPDATE visitor_logs
          SET status = ?, approval_type = ?, approval_decision_at = NOW(),
              entry_time = CASE
                  WHEN ? = 'CheckedIn' THEN COALESCE(entry_time, NOW())
@@ -482,7 +482,7 @@ const createWalkInLog = async ({ req, flatTarget, payload, rules: providedRules,
     const entryMethod = autoEntry ? 'DeliveryAuto' : 'WalkIn';
 
     const [result] = await db.query(
-        `INSERT INTO Visitor_Logs (
+        `INSERT INTO visitor_logs (
             visitor_id, flat_id, status, purpose, expected_time, passcode, approval_type, entry_method,
             delivery_company, vehicle_number, visitor_photo_url, contactless_delivery,
             requested_by_user_id, approval_requested_at, approval_decision_at, entry_time
@@ -606,16 +606,16 @@ exports.getLogs = async (req, res) => {
                 v.watchlist_reason,
                 f.block_name,
                 f.flat_number
-            FROM Visitor_Logs vl
-            JOIN Visitors v ON vl.visitor_id = v.id
-            JOIN Flats f ON vl.flat_id = f.id
+            FROM visitor_logs vl
+            JOIN visitors v ON vl.visitor_id = v.id
+            JOIN flats f ON vl.flat_id = f.id
         `;
 
         let countQuery = `
             SELECT COUNT(*) AS total
-            FROM Visitor_Logs vl
-            JOIN Visitors v ON vl.visitor_id = v.id
-            JOIN Flats f ON vl.flat_id = f.id
+            FROM visitor_logs vl
+            JOIN visitors v ON vl.visitor_id = v.id
+            JOIN flats f ON vl.flat_id = f.id
         `;
 
         const whereClauses = ['v.society_id = ?'];
@@ -623,8 +623,8 @@ exports.getLogs = async (req, res) => {
         const countParams = [societyId];
 
         if (role === 'RESIDENT') {
-            query += ' JOIN User_Flats uf ON uf.flat_id = f.id ';
-            countQuery += ' JOIN User_Flats uf ON uf.flat_id = f.id ';
+            query += ' JOIN user_flats uf ON uf.flat_id = f.id ';
+            countQuery += ' JOIN user_flats uf ON uf.flat_id = f.id ';
             whereClauses.push('uf.user_id = ?');
             queryParams.push(userId);
             countParams.push(userId);
@@ -707,15 +707,15 @@ exports.getPendingApprovals = async (req, res) => {
                 v.watchlist_reason,
                 f.block_name,
                 f.flat_number
-            FROM Visitor_Logs vl
-            JOIN Visitors v ON vl.visitor_id = v.id
-            JOIN Flats f ON vl.flat_id = f.id
+            FROM visitor_logs vl
+            JOIN visitors v ON vl.visitor_id = v.id
+            JOIN flats f ON vl.flat_id = f.id
         `;
         const params = [societyId];
         const whereClauses = ['v.society_id = ?', `vl.status = 'Pending'`];
 
         if (role === 'RESIDENT') {
-            query += ' JOIN User_Flats uf ON uf.flat_id = f.id ';
+            query += ' JOIN user_flats uf ON uf.flat_id = f.id ';
             whereClauses.push('uf.user_id = ?');
             params.push(userId);
         }
@@ -745,7 +745,7 @@ exports.updateRules = async (req, res) => {
         const nextRules = { ...currentRules, ...req.body.rules };
 
         await db.query(
-            `UPDATE Societies SET config_settings = ? WHERE id = ?`,
+            `UPDATE societies SET config_settings = ? WHERE id = ?`,
             [JSON.stringify(nextRules), req.user.society_id]
         );
 
@@ -806,7 +806,7 @@ exports.preApproveVisitor = async (req, res) => {
 
         const now = new Date();
         const [logResult] = await db.query(
-            `INSERT INTO Visitor_Logs (
+            `INSERT INTO visitor_logs (
                 visitor_id, flat_id, status, purpose, expected_time, approval_type, entry_method,
                 delivery_company, vehicle_number, visitor_photo_url, contactless_delivery,
                 requested_by_user_id, approval_requested_at, approval_decision_at
@@ -827,7 +827,7 @@ exports.preApproveVisitor = async (req, res) => {
         );
 
         const passcode = buildPasscode(logResult.insertId);
-        await db.query('UPDATE Visitor_Logs SET passcode = ? WHERE id = ?', [passcode, logResult.insertId]);
+        await db.query('UPDATE visitor_logs SET passcode = ? WHERE id = ?', [passcode, logResult.insertId]);
 
         emitToRooms(
             buildLiveRooms({
@@ -973,7 +973,7 @@ exports.approveVisitor = async (req, res) => {
 
         const [logs] = await db.query(
             `SELECT vl.id, vl.flat_id
-             FROM Visitor_Logs vl
+             FROM visitor_logs vl
              WHERE vl.id = ? AND vl.status = 'Pending'`,
             [logId]
         );
@@ -1017,7 +1017,7 @@ exports.denyVisitor = async (req, res) => {
 
         const [logs] = await db.query(
             `SELECT vl.id, vl.flat_id
-             FROM Visitor_Logs vl
+             FROM visitor_logs vl
              WHERE vl.id = ? AND vl.status = 'Pending'`,
             [logId]
         );
@@ -1056,17 +1056,17 @@ exports.checkInVisitor = async (req, res) => {
 
             if (passcode) {
                 [result] = await db.query(
-                    `UPDATE Visitor_Logs
+                    `UPDATE visitor_logs
                      SET status = 'CheckedIn', entry_time = NOW()
                      WHERE passcode = ? AND status = 'Approved'`,
                     [String(passcode).trim().toUpperCase()]
                 );
 
-                const [rows] = await db.query('SELECT id FROM Visitor_Logs WHERE passcode = ?', [String(passcode).trim().toUpperCase()]);
+                const [rows] = await db.query('SELECT id FROM visitor_logs WHERE passcode = ?', [String(passcode).trim().toUpperCase()]);
                 updatedLogId = rows[0]?.id || 0;
             } else {
                 [result] = await db.query(
-                    `UPDATE Visitor_Logs
+                    `UPDATE visitor_logs
                      SET status = 'CheckedIn', entry_time = NOW()
                      WHERE id = ? AND status = 'Approved'`,
                     [Number(log_id)]
@@ -1079,9 +1079,9 @@ exports.checkInVisitor = async (req, res) => {
 
             const [rows] = await db.query(
                 `SELECT vl.id, vl.flat_id, v.society_id, v.name AS visitor_name, f.block_name, f.flat_number
-                 FROM Visitor_Logs vl
-                 JOIN Visitors v ON v.id = vl.visitor_id
-                 JOIN Flats f ON f.id = vl.flat_id
+                 FROM visitor_logs vl
+                 JOIN visitors v ON v.id = vl.visitor_id
+                 JOIN flats f ON f.id = vl.flat_id
                  WHERE vl.id = ?`,
                 [updatedLogId || Number(log_id)]
             );
@@ -1126,7 +1126,7 @@ exports.checkOutVisitor = async (req, res) => {
 
         const exitPhotoUrl = normalizeOptionalString(req.body.exit_photo_url);
         const [result] = await db.query(
-            `UPDATE Visitor_Logs
+            `UPDATE visitor_logs
              SET status = 'CheckedOut', exit_time = NOW(), exit_photo_url = COALESCE(?, exit_photo_url)
              WHERE id = ? AND status = 'CheckedIn'`,
             [exitPhotoUrl, logId]
@@ -1138,9 +1138,9 @@ exports.checkOutVisitor = async (req, res) => {
 
         const [rows] = await db.query(
             `SELECT vl.id, vl.flat_id, v.society_id, v.name AS visitor_name, f.block_name, f.flat_number
-             FROM Visitor_Logs vl
-             JOIN Visitors v ON v.id = vl.visitor_id
-             JOIN Flats f ON f.id = vl.flat_id
+             FROM visitor_logs vl
+             JOIN visitors v ON v.id = vl.visitor_id
+             JOIN flats f ON f.id = vl.flat_id
              WHERE vl.id = ?`,
             [logId]
         );
@@ -1225,7 +1225,7 @@ exports.setVisitorStatus = async (req, res) => {
         } = req.body;
 
         await db.query(
-            `UPDATE Visitors
+            `UPDATE visitors
              SET is_vip = ?, is_blacklisted = ?, is_watchlisted = ?, watchlist_reason = ?
              WHERE id = ? AND society_id = ?`,
             [is_vip, is_blacklisted, is_watchlisted, watchlist_reason || null, visitor_id, req.user.society_id]

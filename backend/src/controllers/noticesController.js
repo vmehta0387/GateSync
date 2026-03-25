@@ -10,7 +10,7 @@ exports.createNotice = async (req, res) => {
         }
 
         const [result] = await db.query(
-            "INSERT INTO Notices (title, content, created_by) VALUES (?, ?, ?)",
+            "INSERT INTO notices (title, content, created_by) VALUES (?, ?, ?)",
             [title, content, userId]
         );
 
@@ -27,8 +27,8 @@ exports.getNotices = async (req, res) => {
     try {
         const query = `
             SELECT n.*, u.phone_number as admin_phone
-            FROM Notices n
-            JOIN Users u ON n.created_by = u.id
+            FROM notices n
+            JOIN users u ON n.created_by = u.id
             ORDER BY n.created_at DESC
         `;
         const [notices] = await db.query(query);

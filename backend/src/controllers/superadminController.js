@@ -2,10 +2,10 @@ const db = require('../config/db');
 
 exports.getPlatformStats = async (req, res) => {
     try {
-        const [[{ total_societies }]] = await db.query('SELECT COUNT(*) AS total_societies FROM Societies');
-        const [[{ total_users }]] = await db.query('SELECT COUNT(*) AS total_users FROM Users WHERE role != "SUPERADMIN"');
+        const [[{ total_societies }]] = await db.query('SELECT COUNT(*) AS total_societies FROM societies');
+        const [[{ total_users }]] = await db.query('SELECT COUNT(*) AS total_users FROM users WHERE role != "SUPERADMIN"');
         const [[{ total_revenue }]] = await db.query(`
-            SELECT COALESCE(SUM(amount), 0) AS total_revenue FROM Invoices WHERE status = 'Paid'
+            SELECT COALESCE(SUM(amount), 0) AS total_revenue FROM invoices WHERE status = 'Paid'
         `);
 
         return res.status(200).json({
@@ -24,7 +24,7 @@ exports.getPlatformStats = async (req, res) => {
 
 exports.getSocieties = async (req, res) => {
     try {
-        const [societies] = await db.query('SELECT * FROM Societies ORDER BY created_at DESC');
+        const [societies] = await db.query('SELECT * FROM societies ORDER BY created_at DESC');
         return res.status(200).json({ success: true, societies });
     } catch (error) {
         console.error('getSocieties error:', error);
@@ -51,7 +51,7 @@ exports.onboardSociety = async (req, res) => {
 
         // 1. Create Society
         const [societyResult] = await connection.query(
-            `INSERT INTO Societies 
+            `INSERT INTO societies 
             (name, address, society_type, towers_count, floors_per_tower, total_flats, amenities, config_settings, subscription_plan) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
@@ -65,17 +65,17 @@ exports.onboardSociety = async (req, res) => {
 
         // 2. Create Root Admin for Society
         await connection.query(
-            `INSERT INTO Users (society_id, name, email, phone_number, role, status) 
+            `INSERT INTO users (society_id, name, email, phone_number, role, status) 
              VALUES (?, ?, ?, ?, 'ADMIN', 'ACTIVE') 
              ON DUPLICATE KEY UPDATE society_id = VALUES(society_id), role = 'ADMIN', name = VALUES(name), email = VALUES(email)`,
             [societyId, admin.name || '', admin.email || '', admin.phone]
         );
 
-        // 3. Create Gates if provided
+        // 3. Create gates if provided
         if (gates && Array.isArray(gates) && gates.length > 0) {
             const gateValues = gates.map(g => [societyId, g.name, g.gate_type || 'Main']);
             await connection.query(
-                `INSERT INTO Gates (society_id, name, gate_type) VALUES ?`,
+                `INSERT INTO gates (society_id, name, gate_type) VALUES ?`,
                 [gateValues]
             );
         }
@@ -106,7 +106,7 @@ exports.updateSocietyStatus = async (req, res) => {
         }
 
         const [result] = await db.query(
-            "UPDATE Societies SET status = ? WHERE id = ?",
+            "UPDATE societies SET status = ? WHERE id = ?",
             [status, id]
         );
 
@@ -116,7 +116,7 @@ exports.updateSocietyStatus = async (req, res) => {
 
         // Cascade status to tenant users
         await db.query(
-            "UPDATE Users SET status = ? WHERE society_id = ?",
+            "UPDATE users SET status = ? WHERE society_id = ?",
             [status, id]
         );
 
@@ -130,15 +130,15 @@ exports.updateSocietyStatus = async (req, res) => {
 exports.getSocietyById = async (req, res) => {
     try {
         const { id } = req.params;
-        const [societies] = await db.query('SELECT * FROM Societies WHERE id = ?', [id]);
+        const [societies] = await db.query('SELECT * FROM societies WHERE id = ?', [id]);
         if (societies.length === 0) return res.status(404).json({ success: false, message: 'Society not found' });
         
         // Also fetch the root admin
-        const [users] = await db.query('SELECT name, email, phone_number FROM Users WHERE society_id = ? AND role = "ADMIN"', [id]);
+        const [users] = await db.query('SELECT name, email, phone_number FROM users WHERE society_id = ? AND role = "ADMIN"', [id]);
         const admin = users[0] || { name: '', email: '', phone_number: '' };
 
         // Also fetch gates
-        const [gates] = await db.query('SELECT name, gate_type FROM Gates WHERE society_id = ?', [id]);
+        const [gates] = await db.query('SELECT name, gate_type FROM gates WHERE society_id = ?', [id]);
 
         return res.status(200).json({ success: true, society: societies[0], admin, gates });
     } catch (error) {
@@ -151,7 +151,7 @@ exports.generateFlats = async (req, res) => {
     let connection;
     try {
         const { id } = req.params;
-        const [societies] = await db.query('SELECT towers_count, floors_per_tower FROM Societies WHERE id = ?', [id]);
+        const [societies] = await db.query('SELECT towers_count, floors_per_tower FROM societies WHERE id = ?', [id]);
         if (societies.length === 0) return res.status(404).json({ success: false, message: 'Society not found' });
 
         const towersCount = societies[0].towers_count || 1;
@@ -161,7 +161,7 @@ exports.generateFlats = async (req, res) => {
         await connection.beginTransaction();
 
         // Clear existing flats
-        await connection.query('DELETE FROM Flats WHERE society_id = ?', [id]);
+        await connection.query('DELETE FROM flats WHERE society_id = ?', [id]);
 
         const towers = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
         const flatValues = [];
@@ -182,7 +182,7 @@ exports.generateFlats = async (req, res) => {
             for(let i = 0; i < flatValues.length; i+=100) {
                 const chunk = flatValues.slice(i, i+100);
                 await connection.query(
-                    'INSERT INTO Flats (society_id, block_name, flat_number) VALUES ?',
+                    'INSERT INTO flats (society_id, block_name, flat_number) VALUES ?',
                     [chunk]
                 );
             }
@@ -215,7 +215,7 @@ exports.updateSociety = async (req, res) => {
 
         // 1. Update Society
         await connection.query(
-            `UPDATE Societies SET 
+            `UPDATE societies SET 
             name=?, address=?, society_type=?, towers_count=?, floors_per_tower=?, total_flats=?, 
             amenities=?, config_settings=?, subscription_plan=?
             WHERE id=?`,
@@ -229,18 +229,18 @@ exports.updateSociety = async (req, res) => {
         // 2. Update Admin (assuming primary admin logic)
         if (admin && admin.phone_number) {
             await connection.query(
-                `UPDATE Users SET name=?, email=?, phone_number=? WHERE society_id=? AND role='ADMIN' LIMIT 1`,
+                `UPDATE users SET name=?, email=?, phone_number=? WHERE society_id=? AND role='ADMIN' LIMIT 1`,
                 [admin.name || '', admin.email || '', admin.phone_number, id]
             );
         }
 
-        // 3. Update Gates by recreating them
+        // 3. Update gates by recreating them
         if (gates && Array.isArray(gates)) {
-            await connection.query(`DELETE FROM Gates WHERE society_id=?`, [id]);
+            await connection.query(`DELETE FROM gates WHERE society_id=?`, [id]);
             if (gates.length > 0) {
                 const gateValues = gates.map(g => [id, g.name, g.gate_type || 'Main']);
                 await connection.query(
-                    `INSERT INTO Gates (society_id, name, gate_type) VALUES ?`,
+                    `INSERT INTO gates (society_id, name, gate_type) VALUES ?`,
                     [gateValues]
                 );
             }

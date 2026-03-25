@@ -5,8 +5,8 @@ const { isExpoPushToken } = require('../services/pushNotificationService');
 async function fetchUserWithSociety(userId) {
     const [users] = await db.query(`
         SELECT u.*, s.name AS society_name
-        FROM Users u
-        LEFT JOIN Societies s ON s.id = u.society_id
+        FROM users u
+        LEFT JOIN societies s ON s.id = u.society_id
         WHERE u.id = ?
         LIMIT 1
     `, [userId]);
@@ -30,7 +30,7 @@ exports.sendOtp = async (req, res) => {
         }
 
         // Check if user exists in DB before sending OTP
-        const [users] = await db.query('SELECT id, status FROM Users WHERE phone_number = ?', [phone_number]);
+        const [users] = await db.query('SELECT id, status FROM users WHERE phone_number = ?', [phone_number]);
         if (users.length === 0) {
             return res.status(403).json({ success: false, message: 'Phone number is not registered. Please contact your society Admin.' });
         }
@@ -77,7 +77,7 @@ exports.verifyOtp = async (req, res) => {
         otpStore.delete(phone_number);
 
         // Check if user exists
-        const [users] = await db.query('SELECT id FROM Users WHERE phone_number = ?', [phone_number]);
+        const [users] = await db.query('SELECT id FROM users WHERE phone_number = ?', [phone_number]);
         let user = users[0];
 
         if (!user) {
@@ -157,7 +157,7 @@ exports.registerPushToken = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO User_Device_Tokens (
+            `INSERT INTO user_device_tokens (
                 user_id, expo_push_token, installation_id, platform, app_role, device_name, is_active, last_seen_at
             ) VALUES (?, ?, ?, ?, ?, ?, TRUE, NOW())
             ON DUPLICATE KEY UPDATE
@@ -201,7 +201,7 @@ exports.unregisterPushToken = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE User_Device_Tokens
+            `UPDATE user_device_tokens
              SET is_active = FALSE, last_seen_at = NOW()
              WHERE ${conditions.join(' AND ')}`,
             params

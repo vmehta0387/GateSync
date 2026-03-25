@@ -120,7 +120,7 @@ const parseDateRange = (dateFrom, dateTo, fallbackDays = 14) => {
 
 const getFacilityById = async (societyId, facilityId) => {
     const [rows] = await db.query(
-        `SELECT * FROM Facilities WHERE id = ? AND society_id = ?`,
+        `SELECT * FROM facilities WHERE id = ? AND society_id = ?`,
         [facilityId, societyId]
     );
     return rows[0] || null;
@@ -129,7 +129,7 @@ const getFacilityById = async (societyId, facilityId) => {
 const getOverlapGuestCount = async (facilityId, startTime, endTime, excludeBookingId = null) => {
     const [rows] = await db.query(
         `SELECT COALESCE(SUM(guest_count), 0) AS total_guests
-         FROM Facility_Bookings
+         FROM facility_bookings
          WHERE facility_id = ?
            AND status = 'Confirmed'
            AND (? IS NULL OR id <> ?)
@@ -144,7 +144,7 @@ const getOverlapGuestCount = async (facilityId, startTime, endTime, excludeBooki
 const hasMaintenanceConflict = async (facilityId, startTime, endTime, excludeBlockId = null) => {
     const [rows] = await db.query(
         `SELECT id
-         FROM Facility_Maintenance_Blocks
+         FROM facility_maintenance_blocks
          WHERE facility_id = ?
            AND (? IS NULL OR id <> ?)
            AND start_time < ?
@@ -185,8 +185,8 @@ const fetchBookings = async ({ societyId, userId = null, status = null, facility
             u.phone_number AS user_phone,
             (
                 SELECT GROUP_CONCAT(DISTINCT CONCAT(fl.block_name, '-', fl.flat_number) ORDER BY fl.block_name, fl.flat_number SEPARATOR ', ')
-                FROM User_Flats uf
-                INNER JOIN Flats fl ON fl.id = uf.flat_id
+                FROM user_flats uf
+                INNER JOIN flats fl ON fl.id = uf.flat_id
                 WHERE uf.user_id = u.id
             ) AS flat_summary,
             CASE
@@ -195,9 +195,9 @@ const fetchBookings = async ({ societyId, userId = null, status = null, facility
                 THEN 1
                 ELSE 0
             END AS is_cancellable
-         FROM Facility_Bookings fb
-         INNER JOIN Facilities f ON f.id = fb.facility_id
-         INNER JOIN Users u ON u.id = fb.user_id
+         FROM facility_bookings fb
+         INNER JOIN facilities f ON f.id = fb.facility_id
+         INNER JOIN users u ON u.id = fb.user_id
          WHERE ${conditions.join(' AND ')}
          ORDER BY fb.start_time DESC`,
         params
@@ -219,9 +219,9 @@ exports.getFacilities = async (req, res) => {
                 COUNT(DISTINCT CASE
                     WHEN mb.end_time >= NOW() THEN mb.id
                 END) AS maintenance_blocks
-             FROM Facilities f
-             LEFT JOIN Facility_Bookings fb ON fb.facility_id = f.id
-             LEFT JOIN Facility_Maintenance_Blocks mb ON mb.facility_id = f.id
+             FROM facilities f
+             LEFT JOIN facility_bookings fb ON fb.facility_id = f.id
+             LEFT JOIN facility_maintenance_blocks mb ON mb.facility_id = f.id
              WHERE f.society_id = ?
              GROUP BY f.id
              ORDER BY f.is_active DESC, f.name ASC`,
@@ -249,7 +249,7 @@ exports.createFacility = async (req, res) => {
         const pricing = Math.max(0, Number(req.body.pricing || 0));
 
         const [result] = await db.query(
-            `INSERT INTO Facilities (
+            `INSERT INTO facilities (
                 society_id, name, type, description, capacity, rules,
                 max_booking_hours, advance_booking_days, cancellation_hours,
                 pricing, is_paid, is_active
@@ -308,7 +308,7 @@ exports.updateFacility = async (req, res) => {
         const pricing = Math.max(0, Number(req.body.pricing ?? facility.pricing ?? 0));
 
         await db.query(
-            `UPDATE Facilities
+            `UPDATE facilities
              SET name = ?, type = ?, description = ?, capacity = ?, rules = ?,
                  max_booking_hours = ?, advance_booking_days = ?, cancellation_hours = ?,
                  pricing = ?, is_paid = ?, is_active = ?
@@ -374,9 +374,9 @@ exports.getAvailability = async (req, res) => {
                 u.phone_number AS user_phone,
                 '' AS flat_summary,
                 0 AS is_cancellable
-             FROM Facility_Bookings fb
-             INNER JOIN Facilities f ON f.id = fb.facility_id
-             INNER JOIN Users u ON u.id = fb.user_id
+             FROM facility_bookings fb
+             INNER JOIN facilities f ON f.id = fb.facility_id
+             INNER JOIN users u ON u.id = fb.user_id
              WHERE fb.facility_id = ?
                AND fb.status IN ('Confirmed', 'Completed')
                AND fb.start_time < ?
@@ -390,9 +390,9 @@ exports.getAvailability = async (req, res) => {
                 mb.*,
                 f.name AS facility_name,
                 u.name AS created_by_name
-             FROM Facility_Maintenance_Blocks mb
-             INNER JOIN Facilities f ON f.id = mb.facility_id
-             LEFT JOIN Users u ON u.id = mb.created_by
+             FROM facility_maintenance_blocks mb
+             INNER JOIN facilities f ON f.id = mb.facility_id
+             LEFT JOIN users u ON u.id = mb.created_by
              WHERE mb.facility_id = ?
                AND mb.start_time < ?
                AND mb.end_time > ?
@@ -477,7 +477,7 @@ exports.createBooking = async (req, res) => {
         const paymentStatus = Number(facility.is_paid) ? 'Pending' : 'NotRequired';
 
         const [result] = await db.query(
-            `INSERT INTO Facility_Bookings (
+            `INSERT INTO facility_bookings (
                 society_id, facility_id, user_id, guest_count, total_amount,
                 payment_status, notes, start_time, end_time, status
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed')`,
@@ -554,8 +554,8 @@ exports.updateBookingStatus = async (req, res) => {
 
         const [rows] = await db.query(
             `SELECT fb.*, f.name AS facility_name, f.cancellation_hours
-             FROM Facility_Bookings fb
-             INNER JOIN Facilities f ON f.id = fb.facility_id
+             FROM facility_bookings fb
+             INNER JOIN facilities f ON f.id = fb.facility_id
              WHERE fb.id = ? AND fb.society_id = ?`,
             [bookingId, req.user.society_id]
         );
@@ -583,7 +583,7 @@ exports.updateBookingStatus = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE Facility_Bookings
+            `UPDATE facility_bookings
              SET status = ?, payment_status = COALESCE(?, payment_status),
                  notes = COALESCE(?, notes),
                  cancelled_at = CASE WHEN ? = 'Cancelled' THEN NOW() ELSE cancelled_at END
@@ -627,9 +627,9 @@ exports.getMaintenanceBlocks = async (req, res) => {
                 mb.*,
                 f.name AS facility_name,
                 u.name AS created_by_name
-             FROM Facility_Maintenance_Blocks mb
-             INNER JOIN Facilities f ON f.id = mb.facility_id
-             LEFT JOIN Users u ON u.id = mb.created_by
+             FROM facility_maintenance_blocks mb
+             INNER JOIN facilities f ON f.id = mb.facility_id
+             LEFT JOIN users u ON u.id = mb.created_by
              WHERE ${conditions.join(' AND ')}
              ORDER BY mb.start_time ASC`,
             params
@@ -662,7 +662,7 @@ exports.createMaintenanceBlock = async (req, res) => {
         }
 
         const [result] = await db.query(
-            `INSERT INTO Facility_Maintenance_Blocks (facility_id, start_time, end_time, reason, created_by)
+            `INSERT INTO facility_maintenance_blocks (facility_id, start_time, end_time, reason, created_by)
              VALUES (?, ?, ?, ?, ?)`,
             [
                 facilityId,
@@ -691,8 +691,8 @@ exports.deleteMaintenanceBlock = async (req, res) => {
         const blockId = Number(req.params.id);
         const [rows] = await db.query(
             `SELECT mb.id, mb.facility_id, f.society_id
-             FROM Facility_Maintenance_Blocks mb
-             INNER JOIN Facilities f ON f.id = mb.facility_id
+             FROM facility_maintenance_blocks mb
+             INNER JOIN facilities f ON f.id = mb.facility_id
              WHERE mb.id = ? AND f.society_id = ?`,
             [blockId, req.user.society_id]
         );
@@ -702,7 +702,7 @@ exports.deleteMaintenanceBlock = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Maintenance block not found' });
         }
 
-        await db.query(`DELETE FROM Facility_Maintenance_Blocks WHERE id = ?`, [blockId]);
+        await db.query(`DELETE FROM facility_maintenance_blocks WHERE id = ?`, [blockId]);
 
         emitToRooms(
             buildFacilityRooms({ societyId: req.user.society_id }),
@@ -725,7 +725,7 @@ exports.getFacilitySummary = async (req, res) => {
             `SELECT
                 COUNT(*) AS total_facilities,
                 COUNT(CASE WHEN is_active = 1 THEN 1 END) AS active_facilities
-             FROM Facilities
+             FROM facilities
              WHERE society_id = ?`,
             [societyId]
         );
@@ -735,7 +735,7 @@ exports.getFacilitySummary = async (req, res) => {
                 COUNT(CASE WHEN status = 'Confirmed' AND start_time >= NOW() THEN 1 END) AS upcoming_bookings,
                 COUNT(CASE WHEN status = 'Confirmed' AND end_time > NOW() AND start_time <= NOW() THEN 1 END) AS active_now,
                 COALESCE(SUM(CASE WHEN payment_status = 'Paid' THEN total_amount ELSE 0 END), 0) AS revenue_generated
-             FROM Facility_Bookings
+             FROM facility_bookings
              WHERE society_id = ?`,
             [societyId]
         );
@@ -746,8 +746,8 @@ exports.getFacilitySummary = async (req, res) => {
                 f.name,
                 COUNT(fb.id) AS total_bookings,
                 COALESCE(SUM(fb.total_amount), 0) AS revenue
-             FROM Facilities f
-             LEFT JOIN Facility_Bookings fb
+             FROM facilities f
+             LEFT JOIN facility_bookings fb
                 ON fb.facility_id = f.id
                AND fb.status IN ('Confirmed', 'Completed')
              WHERE f.society_id = ?
@@ -761,7 +761,7 @@ exports.getFacilitySummary = async (req, res) => {
             `SELECT
                 LPAD(HOUR(start_time), 2, '0') AS hour_label,
                 COUNT(*) AS total
-             FROM Facility_Bookings
+             FROM facility_bookings
              WHERE society_id = ?
                AND status IN ('Confirmed', 'Completed')
              GROUP BY HOUR(start_time)
@@ -772,8 +772,8 @@ exports.getFacilitySummary = async (req, res) => {
 
         const [[maintenance]] = await db.query(
             `SELECT COUNT(*) AS scheduled_maintenance
-             FROM Facility_Maintenance_Blocks mb
-             INNER JOIN Facilities f ON f.id = mb.facility_id
+             FROM facility_maintenance_blocks mb
+             INNER JOIN facilities f ON f.id = mb.facility_id
              WHERE f.society_id = ?
                AND mb.end_time >= NOW()`,
             [societyId]

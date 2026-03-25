@@ -28,7 +28,7 @@ const deactivateTokens = async (tokens = []) => {
 
     const placeholders = normalizedTokens.map(() => '?').join(', ');
     await db.query(
-        `UPDATE User_Device_Tokens
+        `UPDATE user_device_tokens
          SET is_active = FALSE
          WHERE expo_push_token IN (${placeholders})`,
         normalizedTokens
@@ -44,7 +44,7 @@ const fetchActiveTokensForUsers = async (userIds = []) => {
     const placeholders = normalizedIds.map(() => '?').join(', ');
     const [rows] = await db.query(
         `SELECT DISTINCT expo_push_token
-         FROM User_Device_Tokens
+         FROM user_device_tokens
          WHERE is_active = TRUE AND user_id IN (${placeholders})`,
         normalizedIds
     );
@@ -120,8 +120,8 @@ async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = '
 async function getFlatResidentUserIds(flatId) {
     const [rows] = await db.query(
         `SELECT DISTINCT u.id
-         FROM User_Flats uf
-         INNER JOIN Users u ON u.id = uf.user_id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
          WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE' AND COALESCE(u.push_notifications, 1) = 1`,
         [flatId]
     );
@@ -132,7 +132,7 @@ async function getFlatResidentUserIds(flatId) {
 async function getSocietyGuardUserIds(societyId) {
     const [rows] = await db.query(
         `SELECT id
-         FROM Users
+         FROM users
          WHERE society_id = ? AND role = 'GUARD' AND status = 'ACTIVE'`,
         [societyId]
     );

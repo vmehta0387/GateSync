@@ -5,7 +5,7 @@ async function seedSuperAdmin() {
     try {
         const phone = '9999999999';
         await db.query(`
-            INSERT IGNORE INTO Users (phone_number, role, status, society_id) 
+            INSERT IGNORE INTO users (phone_number, role, status, society_id) 
             VALUES (?, 'SUPERADMIN', 'ACTIVE', NULL)
         `, [phone]);
         console.log('Successfully seeded SUPERADMIN with phone number:', phone);

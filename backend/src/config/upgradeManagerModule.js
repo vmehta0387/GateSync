@@ -3,7 +3,7 @@ const db = require('./db');
 async function upgradeManagerModule() {
     try {
         await db.query(`
-            ALTER TABLE Users
+            ALTER TABLE users
             MODIFY COLUMN role ENUM('SUPERADMIN', 'ADMIN', 'MANAGER', 'GUARD', 'RESIDENT') NOT NULL
         `);
 

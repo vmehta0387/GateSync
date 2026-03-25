@@ -207,8 +207,8 @@ const mapDocumentRow = (row) => ({
 const getCommitteeById = async (committeeId, societyId) => {
     const [rows] = await db.query(
         `SELECT c.*, creator.name AS created_by_name
-         FROM Committees c
-         LEFT JOIN Users creator ON creator.id = c.created_by
+         FROM committees c
+         LEFT JOIN users creator ON creator.id = c.created_by
          WHERE c.id = ? AND c.society_id = ?`,
         [committeeId, societyId]
     );
@@ -223,8 +223,8 @@ const getCommitteeMembers = async (committeeId) => {
             u.phone_number,
             u.email,
             u.role AS user_role
-         FROM Committee_Members cm
-         JOIN Users u ON u.id = cm.user_id
+         FROM committee_members cm
+         JOIN users u ON u.id = cm.user_id
          WHERE cm.committee_id = ?
          ORDER BY cm.is_primary_contact DESC, cm.role_title ASC, u.name ASC`,
         [committeeId]
@@ -244,9 +244,9 @@ const getCommitteeMessagesData = async (committeeId) => {
             u.name AS sender_name,
             u.role AS sender_role,
             cmm.role_title AS sender_role_title
-         FROM Committee_Messages cm
-         JOIN Users u ON u.id = cm.sender_id
-         LEFT JOIN Committee_Members cmm ON cmm.committee_id = cm.committee_id AND cmm.user_id = cm.sender_id
+         FROM committee_messages cm
+         JOIN users u ON u.id = cm.sender_id
+         LEFT JOIN committee_members cmm ON cmm.committee_id = cm.committee_id AND cmm.user_id = cm.sender_id
          WHERE cm.committee_id = ?
          ORDER BY cm.created_at DESC
          LIMIT 50`,
@@ -261,9 +261,9 @@ const getCommitteeTasksData = async (committeeId) => {
             ct.*,
             cm.role_title AS assigned_role_title,
             u.name AS assigned_to_name
-         FROM Committee_Tasks ct
-         LEFT JOIN Committee_Members cm ON cm.id = ct.assigned_member_id
-         LEFT JOIN Users u ON u.id = cm.user_id
+         FROM committee_tasks ct
+         LEFT JOIN committee_members cm ON cm.id = ct.assigned_member_id
+         LEFT JOIN users u ON u.id = cm.user_id
          WHERE ct.committee_id = ?
          ORDER BY FIELD(ct.status, 'Open', 'InProgress', 'Blocked', 'Completed'), ct.due_date IS NULL, ct.due_date ASC, ct.created_at DESC`,
         [committeeId]
@@ -275,30 +275,30 @@ const getCommitteeVotesData = async (committeeId, currentUserId) => {
     const [votes, options, counts, responses] = await Promise.all([
         db.query(
             `SELECT cv.*, u.name AS created_by_name
-             FROM Committee_Votes cv
-             LEFT JOIN Users u ON u.id = cv.created_by
+             FROM committee_votes cv
+             LEFT JOIN users u ON u.id = cv.created_by
              WHERE cv.committee_id = ?
              ORDER BY cv.created_at DESC`,
             [committeeId]
         ),
         db.query(
             `SELECT vote_id, id, option_text
-             FROM Committee_Vote_Options
-             WHERE vote_id IN (SELECT id FROM Committee_Votes WHERE committee_id = ?)
+             FROM committee_vote_options
+             WHERE vote_id IN (SELECT id FROM committee_votes WHERE committee_id = ?)
              ORDER BY id`,
             [committeeId]
         ),
         db.query(
             `SELECT option_id, COUNT(*) AS total
-             FROM Committee_Vote_Responses
-             WHERE vote_id IN (SELECT id FROM Committee_Votes WHERE committee_id = ?)
+             FROM committee_vote_responses
+             WHERE vote_id IN (SELECT id FROM committee_votes WHERE committee_id = ?)
              GROUP BY option_id`,
             [committeeId]
         ),
         db.query(
             `SELECT vote_id, option_id
-             FROM Committee_Vote_Responses
-             WHERE vote_id IN (SELECT id FROM Committee_Votes WHERE committee_id = ?) AND user_id = ?`,
+             FROM committee_vote_responses
+             WHERE vote_id IN (SELECT id FROM committee_votes WHERE committee_id = ?) AND user_id = ?`,
             [committeeId, currentUserId]
         ),
     ]);
@@ -321,8 +321,8 @@ const getCommitteeDocumentsData = async (committeeId) => {
         `SELECT
             cd.*,
             u.name AS uploaded_by_name
-         FROM Committee_Documents cd
-         LEFT JOIN Users u ON u.id = cd.uploaded_by
+         FROM committee_documents cd
+         LEFT JOIN users u ON u.id = cd.uploaded_by
          WHERE cd.committee_id = ?
          ORDER BY cd.created_at DESC`,
         [committeeId]
@@ -340,9 +340,9 @@ const getAvailableMembers = async (societyId) => {
             u.role,
             f.block_name,
             f.flat_number
-         FROM Users u
-         LEFT JOIN User_Flats uf ON uf.user_id = u.id
-         LEFT JOIN Flats f ON f.id = uf.flat_id
+         FROM users u
+         LEFT JOIN user_flats uf ON uf.user_id = u.id
+         LEFT JOIN flats f ON f.id = uf.flat_id
          WHERE u.society_id = ? AND u.role IN ('ADMIN', 'RESIDENT', 'GUARD')
          ORDER BY FIELD(u.role, 'ADMIN', 'RESIDENT', 'GUARD'), u.name ASC`,
         [societyId]
@@ -360,7 +360,7 @@ const getAvailableMembers = async (societyId) => {
 };
 
 const replaceCommitteeMembers = async (connection, committeeId, societyId, members = []) => {
-    await connection.query(`DELETE FROM Committee_Members WHERE committee_id = ?`, [committeeId]);
+    await connection.query(`DELETE FROM committee_members WHERE committee_id = ?`, [committeeId]);
 
     if (!Array.isArray(members) || members.length === 0) {
         return;
@@ -368,7 +368,7 @@ const replaceCommitteeMembers = async (connection, committeeId, societyId, membe
 
     const userIds = members.map((member) => Number(member.user_id)).filter(Boolean);
     const [validUsers] = await connection.query(
-        `SELECT id FROM Users WHERE society_id = ? AND id IN (${userIds.map(() => '?').join(',')})`,
+        `SELECT id FROM users WHERE society_id = ? AND id IN (${userIds.map(() => '?').join(',')})`,
         [societyId, ...userIds]
     );
     const validUserIds = new Set(validUsers.map((row) => row.id));
@@ -401,7 +401,7 @@ const replaceCommitteeMembers = async (connection, committeeId, societyId, membe
 
     if (values.length > 0) {
         await connection.query(
-            `INSERT INTO Committee_Members (
+            `INSERT INTO committee_members (
                 committee_id, user_id, role_title, permission_scope, permissions_json,
                 tenure_start_date, tenure_end_date, is_primary_contact, status
             ) VALUES ?`,
@@ -429,12 +429,12 @@ exports.getCommittees = async (req, res) => {
                     COUNT(DISTINCT CASE WHEN ct.status IN ('Open', 'InProgress', 'Blocked') THEN ct.id END) AS open_task_count,
                     COUNT(DISTINCT CASE WHEN cv.status = 'Live' THEN cv.id END) AS live_vote_count,
                     COUNT(DISTINCT cd.id) AS document_count
-                 FROM Committees c
-                 LEFT JOIN Users creator ON creator.id = c.created_by
-                 LEFT JOIN Committee_Members cm ON cm.committee_id = c.id
-                 LEFT JOIN Committee_Tasks ct ON ct.committee_id = c.id
-                 LEFT JOIN Committee_Votes cv ON cv.committee_id = c.id
-                 LEFT JOIN Committee_Documents cd ON cd.committee_id = c.id
+                 FROM committees c
+                 LEFT JOIN users creator ON creator.id = c.created_by
+                 LEFT JOIN committee_members cm ON cm.committee_id = c.id
+                 LEFT JOIN committee_tasks ct ON ct.committee_id = c.id
+                 LEFT JOIN committee_votes cv ON cv.committee_id = c.id
+                 LEFT JOIN committee_documents cd ON cd.committee_id = c.id
                  WHERE c.society_id = ?
                  GROUP BY c.id, creator.name
                  ORDER BY FIELD(c.status, 'Active', 'Draft', 'Inactive', 'Archived'), c.created_at DESC`,
@@ -460,7 +460,7 @@ exports.getPublicDirectory = async (req, res) => {
     try {
         const [committees] = await db.query(
             `SELECT *
-             FROM Committees
+             FROM committees
              WHERE society_id = ? AND is_public = TRUE AND status = 'Active'
              ORDER BY name ASC`,
             [req.user.society_id]
@@ -498,7 +498,7 @@ exports.createCommittee = async (req, res) => {
 
         await connection.beginTransaction();
         const [result] = await connection.query(
-            `INSERT INTO Committees (
+            `INSERT INTO committees (
                 society_id, committee_type, name, description, is_public, start_date, end_date, status, created_by
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [req.user.society_id, committeeType, name, description, isPublic, startDate, endDate, status, req.user.id]
@@ -545,7 +545,7 @@ exports.updateCommittee = async (req, res) => {
 
         await connection.beginTransaction();
         await connection.query(
-            `UPDATE Committees
+            `UPDATE committees
              SET committee_type = ?, name = ?, description = ?, is_public = ?, start_date = ?, end_date = ?, status = ?
              WHERE id = ? AND society_id = ?`,
             [committeeType, name, description, isPublic, startDate, endDate, status, committeeId, req.user.society_id]
@@ -641,7 +641,7 @@ exports.sendCommitteeMessage = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Committee_Messages (committee_id, sender_id, content, attachments_json, is_decision_log)
+            `INSERT INTO committee_messages (committee_id, sender_id, content, attachments_json, is_decision_log)
              VALUES (?, ?, ?, ?, ?)`,
             [committeeId, req.user.id, content, JSON.stringify(attachments), isDecisionLog]
         );
@@ -673,7 +673,7 @@ exports.createCommitteeTask = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Committee_Tasks (
+            `INSERT INTO committee_tasks (
                 committee_id, title, description, assigned_member_id, due_date, status, priority, created_by
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [committeeId, title, description, assignedMemberId, dueDate, status, priority, req.user.id]
@@ -700,8 +700,8 @@ exports.updateCommitteeTask = async (req, res) => {
 
         const [rows] = await db.query(
             `SELECT ct.id
-             FROM Committee_Tasks ct
-             JOIN Committees c ON c.id = ct.committee_id
+             FROM committee_tasks ct
+             JOIN committees c ON c.id = ct.committee_id
              WHERE ct.id = ? AND c.society_id = ?`,
             [taskId, req.user.society_id]
         );
@@ -735,7 +735,7 @@ exports.updateCommitteeTask = async (req, res) => {
         }
 
         params.push(taskId);
-        await db.query(`UPDATE Committee_Tasks SET ${updates.join(', ')} WHERE id = ?`, params);
+        await db.query(`UPDATE committee_tasks SET ${updates.join(', ')} WHERE id = ?`, params);
 
         return res.status(200).json({ success: true, message: 'Task updated successfully' });
     } catch (error) {
@@ -770,14 +770,14 @@ exports.createCommitteeVote = async (req, res) => {
 
         await connection.beginTransaction();
         const [result] = await connection.query(
-            `INSERT INTO Committee_Votes (committee_id, title, description, decision_type, status, closes_at, created_by)
+            `INSERT INTO committee_votes (committee_id, title, description, decision_type, status, closes_at, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [committeeId, title, description, decisionType, status, closesAt, req.user.id]
         );
 
         const optionValues = options.map((optionText) => [result.insertId, optionText]);
         await connection.query(
-            `INSERT INTO Committee_Vote_Options (vote_id, option_text) VALUES ?`,
+            `INSERT INTO committee_vote_options (vote_id, option_text) VALUES ?`,
             [optionValues]
         );
 
@@ -808,9 +808,9 @@ exports.respondToCommitteeVote = async (req, res) => {
                 cv.closes_at,
                 c.society_id,
                 cm.id AS membership_id
-             FROM Committee_Votes cv
-             JOIN Committees c ON c.id = cv.committee_id
-             LEFT JOIN Committee_Members cm ON cm.committee_id = c.id AND cm.user_id = ? AND cm.status = 'Active'
+             FROM committee_votes cv
+             JOIN committees c ON c.id = cv.committee_id
+             LEFT JOIN committee_members cm ON cm.committee_id = c.id AND cm.user_id = ? AND cm.status = 'Active'
              WHERE cv.id = ?`,
             [req.user.id, voteId]
         );
@@ -827,7 +827,7 @@ exports.respondToCommitteeVote = async (req, res) => {
         }
 
         const [validOption] = await db.query(
-            `SELECT id FROM Committee_Vote_Options WHERE id = ? AND vote_id = ?`,
+            `SELECT id FROM committee_vote_options WHERE id = ? AND vote_id = ?`,
             [optionId, voteId]
         );
         if (!validOption[0][0]) {
@@ -835,7 +835,7 @@ exports.respondToCommitteeVote = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Committee_Vote_Responses (vote_id, user_id, option_id)
+            `INSERT INTO committee_vote_responses (vote_id, user_id, option_id)
              VALUES (?, ?, ?)
              ON DUPLICATE KEY UPDATE option_id = VALUES(option_id), responded_at = NOW()`,
             [voteId, req.user.id, optionId]
@@ -865,7 +865,7 @@ exports.createCommitteeDocument = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Committee_Documents (committee_id, title, category, file_url, uploaded_by)
+            `INSERT INTO committee_documents (committee_id, title, category, file_url, uploaded_by)
              VALUES (?, ?, ?, ?, ?)`,
             [committeeId, title, category, fileUrl, req.user.id]
         );

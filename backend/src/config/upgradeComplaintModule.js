@@ -1,19 +1,19 @@
 const db = require('./db');
 
 const statements = [
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS created_by_user_id INT NULL AFTER flat_id`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS ticket_id VARCHAR(30) NULL AFTER created_by_user_id`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS category_id INT NULL AFTER ticket_id`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS attachments_json JSON NULL AFTER category`,
-    `ALTER TABLE Complaints MODIFY COLUMN status ENUM('Open', 'InProgress', 'OnHold', 'Resolved', 'Closed') DEFAULT 'Open'`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS resolved_at DATETIME NULL AFTER sla_deadline`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS closed_at DATETIME NULL AFTER resolved_at`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS escalation_level INT DEFAULT 0 AFTER closed_at`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS escalated_to_type ENUM('Admin', 'Committee') NULL AFTER escalation_level`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS escalated_to_user_id INT NULL AFTER escalated_to_type`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS escalated_to_committee_id INT NULL AFTER escalated_to_user_id`,
-    `ALTER TABLE Complaints ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at`,
-    `CREATE TABLE IF NOT EXISTS Complaint_Categories (
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS created_by_user_id INT NULL AFTER flat_id`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS ticket_id VARCHAR(30) NULL AFTER created_by_user_id`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS category_id INT NULL AFTER ticket_id`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS attachments_json JSON NULL AFTER category`,
+    `ALTER TABLE complaints MODIFY COLUMN status ENUM('Open', 'InProgress', 'OnHold', 'Resolved', 'Closed') DEFAULT 'Open'`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolved_at DATETIME NULL AFTER sla_deadline`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS closed_at DATETIME NULL AFTER resolved_at`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS escalation_level INT DEFAULT 0 AFTER closed_at`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS escalated_to_type ENUM('Admin', 'Committee') NULL AFTER escalation_level`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS escalated_to_user_id INT NULL AFTER escalated_to_type`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS escalated_to_committee_id INT NULL AFTER escalated_to_user_id`,
+    `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at`,
+    `CREATE TABLE IF NOT EXISTS complaint_categories (
         id INT AUTO_INCREMENT PRIMARY KEY,
         society_id INT NOT NULL,
         name VARCHAR(100) NOT NULL,
@@ -24,35 +24,35 @@ const statements = [
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_complaint_category (society_id, name),
-        FOREIGN KEY (society_id) REFERENCES Societies(id) ON DELETE CASCADE
+        FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
     )`,
-    `CREATE TABLE IF NOT EXISTS Complaint_Assignees (
+    `CREATE TABLE IF NOT EXISTS complaint_assignees (
         id INT AUTO_INCREMENT PRIMARY KEY,
         complaint_id INT NOT NULL,
-        assignee_type ENUM('User', 'Staff', 'Committee') DEFAULT 'User',
+        assignee_type ENUM('User', 'staff', 'Committee') DEFAULT 'User',
         user_id INT NULL,
         staff_id INT NULL,
         committee_id INT NULL,
         is_primary BOOLEAN DEFAULT FALSE,
         assigned_by_user_id INT NULL,
         assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (complaint_id) REFERENCES Complaints(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE,
-        FOREIGN KEY (assigned_by_user_id) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (complaint_id) REFERENCES complaints(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_by_user_id) REFERENCES users(id) ON DELETE SET NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS Complaint_Messages (
+    `CREATE TABLE IF NOT EXISTS complaint_messages (
         id INT AUTO_INCREMENT PRIMARY KEY,
         complaint_id INT NOT NULL,
-        sender_type ENUM('Resident', 'Admin', 'Staff', 'System') DEFAULT 'Resident',
+        sender_type ENUM('Resident', 'Admin', 'staff', 'System') DEFAULT 'Resident',
         sender_user_id INT NULL,
         sender_staff_id INT NULL,
         message TEXT NOT NULL,
         attachments_json JSON NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (complaint_id) REFERENCES Complaints(id) ON DELETE CASCADE,
-        FOREIGN KEY (sender_user_id) REFERENCES Users(id) ON DELETE CASCADE
+        FOREIGN KEY (complaint_id) REFERENCES complaints(id) ON DELETE CASCADE,
+        FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
-    `CREATE TABLE IF NOT EXISTS Complaint_Status_History (
+    `CREATE TABLE IF NOT EXISTS complaint_status_history (
         id INT AUTO_INCREMENT PRIMARY KEY,
         complaint_id INT NOT NULL,
         status ENUM('Open', 'InProgress', 'OnHold', 'Resolved', 'Closed') NOT NULL,
@@ -60,8 +60,8 @@ const statements = [
         changed_by_user_id INT NULL,
         changed_by_staff_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (complaint_id) REFERENCES Complaints(id) ON DELETE CASCADE,
-        FOREIGN KEY (changed_by_user_id) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (complaint_id) REFERENCES complaints(id) ON DELETE CASCADE,
+        FOREIGN KEY (changed_by_user_id) REFERENCES users(id) ON DELETE SET NULL
     )`,
 ];
 
@@ -73,7 +73,7 @@ async function runUpgrade() {
             await db.query(statement);
         }
 
-        const [societies] = await db.query(`SELECT id FROM Societies`);
+        const [societies] = await db.query(`SELECT id FROM societies`);
         for (const society of societies) {
             const values = [
                 ['Plumbing', 'Water leakage, pipe issues, or drainage problems.', 'High', 24],
@@ -86,17 +86,17 @@ async function runUpgrade() {
             ].map((item) => [society.id, item[0], item[1], item[2], item[3], true, true]);
 
             await db.query(
-                `INSERT IGNORE INTO Complaint_Categories (
+                `INSERT IGNORE INTO complaint_categories (
                     society_id, name, description, default_priority, sla_hours, is_default, is_active
                 ) VALUES ?`,
                 [values]
             );
         }
 
-        const [complaints] = await db.query(`SELECT id FROM Complaints WHERE ticket_id IS NULL OR ticket_id = ''`);
+        const [complaints] = await db.query(`SELECT id FROM complaints WHERE ticket_id IS NULL OR ticket_id = ''`);
         for (const complaint of complaints) {
             const ticketId = `GP-CMP-${String(complaint.id).padStart(6, '0')}`;
-            await db.query(`UPDATE Complaints SET ticket_id = ? WHERE id = ?`, [ticketId, complaint.id]);
+            await db.query(`UPDATE complaints SET ticket_id = ? WHERE id = ?`, [ticketId, complaint.id]);
         }
 
         console.log('Complaint module upgrade completed successfully.');

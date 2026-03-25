@@ -77,7 +77,7 @@ const ensureDefaultCategories = async (societyId) => {
 
     if (values.length > 0) {
         await db.query(
-            `INSERT IGNORE INTO Complaint_Categories (
+            `INSERT IGNORE INTO complaint_categories (
                 society_id, name, description, default_priority, sla_hours, is_default, is_active
             ) VALUES ?`,
             [values]
@@ -160,10 +160,10 @@ const getComplaintBase = async (complaintId, societyId) => {
             u.name AS resident_name,
             cc.name AS category_name,
             CASE WHEN c.sla_deadline IS NOT NULL AND c.status NOT IN ('Resolved', 'Closed') AND c.sla_deadline < NOW() THEN TRUE ELSE FALSE END AS is_overdue
-         FROM Complaints c
-         LEFT JOIN Flats f ON f.id = c.flat_id
-         LEFT JOIN Users u ON u.id = c.created_by_user_id
-         LEFT JOIN Complaint_Categories cc ON cc.id = c.category_id
+         FROM complaints c
+         LEFT JOIN flats f ON f.id = c.flat_id
+         LEFT JOIN users u ON u.id = c.created_by_user_id
+         LEFT JOIN complaint_categories cc ON cc.id = c.category_id
          WHERE c.id = ? AND c.society_id = ?`,
         [complaintId, societyId]
     );
@@ -176,18 +176,18 @@ const getComplaintAssignees = async (complaintId) => {
             ca.*,
             CASE
                 WHEN ca.assignee_type = 'User' THEN u.name
-                WHEN ca.assignee_type = 'Staff' THEN s.name
+                WHEN ca.assignee_type = 'staff' THEN s.name
                 WHEN ca.assignee_type = 'Committee' THEN c.name
             END AS name,
             CASE
                 WHEN ca.assignee_type = 'User' THEN u.role
-                WHEN ca.assignee_type = 'Staff' THEN s.type
+                WHEN ca.assignee_type = 'staff' THEN s.type
                 WHEN ca.assignee_type = 'Committee' THEN c.committee_type
             END AS role_label
-         FROM Complaint_Assignees ca
-         LEFT JOIN Users u ON u.id = ca.user_id
-         LEFT JOIN Staff s ON s.id = ca.staff_id
-         LEFT JOIN Committees c ON c.id = ca.committee_id
+         FROM complaint_assignees ca
+         LEFT JOIN users u ON u.id = ca.user_id
+         LEFT JOIN staff s ON s.id = ca.staff_id
+         LEFT JOIN committees c ON c.id = ca.committee_id
          WHERE ca.complaint_id = ?
          ORDER BY ca.is_primary DESC, ca.assigned_at ASC`,
         [complaintId]
@@ -201,12 +201,12 @@ const getComplaintMessages = async (complaintId) => {
             cm.*,
             CASE
                 WHEN cm.sender_type IN ('Resident', 'Admin') THEN u.name
-                WHEN cm.sender_type = 'Staff' THEN s.name
+                WHEN cm.sender_type = 'staff' THEN s.name
                 ELSE 'System'
             END AS sender_name
-         FROM Complaint_Messages cm
-         LEFT JOIN Users u ON u.id = cm.sender_user_id
-         LEFT JOIN Staff s ON s.id = cm.sender_staff_id
+         FROM complaint_messages cm
+         LEFT JOIN users u ON u.id = cm.sender_user_id
+         LEFT JOIN staff s ON s.id = cm.sender_staff_id
          WHERE cm.complaint_id = ?
          ORDER BY cm.created_at ASC`,
         [complaintId]
@@ -223,9 +223,9 @@ const getComplaintHistory = async (complaintId) => {
                 WHEN h.changed_by_staff_id IS NOT NULL THEN s.name
                 ELSE 'System'
             END AS changed_by_name
-         FROM Complaint_Status_History h
-         LEFT JOIN Users u ON u.id = h.changed_by_user_id
-         LEFT JOIN Staff s ON s.id = h.changed_by_staff_id
+         FROM complaint_status_history h
+         LEFT JOIN users u ON u.id = h.changed_by_user_id
+         LEFT JOIN staff s ON s.id = h.changed_by_staff_id
          WHERE h.complaint_id = ?
          ORDER BY h.created_at ASC`,
         [complaintId]
@@ -235,30 +235,30 @@ const getComplaintHistory = async (complaintId) => {
 
 const runEscalationSweep = async (societyId) => {
     const [[primaryAdmin]] = await db.query(
-        `SELECT id FROM Users WHERE society_id = ? AND role = 'ADMIN' ORDER BY id ASC LIMIT 1`,
+        `SELECT id FROM users WHERE society_id = ? AND role = 'ADMIN' ORDER BY id ASC LIMIT 1`,
         [societyId]
     );
     const [[coreCommittee]] = await db.query(
-        `SELECT id FROM Committees WHERE society_id = ? AND status = 'Active' AND committee_type IN ('CoreCommittee', 'SecurityCommittee') ORDER BY id ASC LIMIT 1`,
+        `SELECT id FROM committees WHERE society_id = ? AND status = 'Active' AND committee_type IN ('CoreCommittee', 'SecurityCommittee') ORDER BY id ASC LIMIT 1`,
         [societyId]
     );
 
     if (primaryAdmin) {
         const [rows] = await db.query(
-            `SELECT id, status FROM Complaints
+            `SELECT id, status FROM complaints
              WHERE society_id = ? AND status NOT IN ('Resolved', 'Closed') AND sla_deadline IS NOT NULL AND sla_deadline < NOW() AND escalation_level = 0`,
             [societyId]
         );
 
         for (const row of rows) {
             await db.query(
-                `UPDATE Complaints
+                `UPDATE complaints
                  SET escalation_level = 1, escalated_to_type = 'Admin', escalated_to_user_id = ?
                  WHERE id = ?`,
                 [primaryAdmin.id, row.id]
             );
             await db.query(
-                `INSERT INTO Complaint_Status_History (complaint_id, status, note)
+                `INSERT INTO complaint_status_history (complaint_id, status, note)
                  VALUES (?, ?, 'Auto escalated to senior admin after SLA breach')`,
                 [row.id, row.status]
             );
@@ -267,7 +267,7 @@ const runEscalationSweep = async (societyId) => {
 
     if (coreCommittee) {
         const [rows] = await db.query(
-            `SELECT id, status FROM Complaints
+            `SELECT id, status FROM complaints
              WHERE society_id = ? AND status NOT IN ('Resolved', 'Closed') AND sla_deadline IS NOT NULL
                AND sla_deadline < DATE_SUB(NOW(), INTERVAL 24 HOUR)
                AND escalation_level = 1`,
@@ -276,13 +276,13 @@ const runEscalationSweep = async (societyId) => {
 
         for (const row of rows) {
             await db.query(
-                `UPDATE Complaints
+                `UPDATE complaints
                  SET escalation_level = 2, escalated_to_type = 'Committee', escalated_to_committee_id = ?
                  WHERE id = ?`,
                 [coreCommittee.id, row.id]
             );
             await db.query(
-                `INSERT INTO Complaint_Status_History (complaint_id, status, note)
+                `INSERT INTO complaint_status_history (complaint_id, status, note)
                  VALUES (?, ?, 'Auto escalated to committee after extended SLA breach')`,
                 [row.id, row.status]
             );
@@ -291,7 +291,7 @@ const runEscalationSweep = async (societyId) => {
 };
 
 const validateResidentFlatAccess = async (userId, flatId) => {
-    const [rows] = await db.query(`SELECT 1 FROM User_Flats WHERE user_id = ? AND flat_id = ? LIMIT 1`, [userId, flatId]);
+    const [rows] = await db.query(`SELECT 1 FROM user_flats WHERE user_id = ? AND flat_id = ? LIMIT 1`, [userId, flatId]);
     return Boolean(rows[0]);
 };
 
@@ -299,7 +299,7 @@ exports.getCategories = async (req, res) => {
     try {
         await ensureDefaultCategories(req.user.society_id);
         const [rows] = await db.query(
-            `SELECT * FROM Complaint_Categories WHERE society_id = ? AND is_active = TRUE ORDER BY is_default DESC, name ASC`,
+            `SELECT * FROM complaint_categories WHERE society_id = ? AND is_active = TRUE ORDER BY is_default DESC, name ASC`,
             [req.user.society_id]
         );
         return res.status(200).json({ success: true, categories: rows.map(mapCategoryRow) });
@@ -321,7 +321,7 @@ exports.createCategory = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Complaint_Categories (society_id, name, description, default_priority, sla_hours, is_default, is_active)
+            `INSERT INTO complaint_categories (society_id, name, description, default_priority, sla_hours, is_default, is_active)
              VALUES (?, ?, ?, ?, ?, FALSE, TRUE)`,
             [req.user.society_id, name, description, defaultPriority, slaHours]
         );
@@ -355,7 +355,7 @@ exports.createComplaint = async (req, res) => {
         }
 
         const [[category]] = await db.query(
-            `SELECT * FROM Complaint_Categories WHERE id = ? AND society_id = ? AND is_active = TRUE`,
+            `SELECT * FROM complaint_categories WHERE id = ? AND society_id = ? AND is_active = TRUE`,
             [categoryId, req.user.society_id]
         );
         if (!category) {
@@ -369,7 +369,7 @@ exports.createComplaint = async (req, res) => {
 
         await connection.beginTransaction();
         const [result] = await connection.query(
-             `INSERT INTO Complaints (
+             `INSERT INTO complaints (
                  society_id, flat_id, created_by_user_id, ticket_id, category_id, category, description,
                  attachments_json, status, priority, sla_deadline
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?, ?)`,
@@ -377,17 +377,17 @@ exports.createComplaint = async (req, res) => {
         );
 
         const ticketId = `GP-CMP-${String(result.insertId).padStart(6, '0')}`;
-        await connection.query(`UPDATE Complaints SET ticket_id = ? WHERE id = ?`, [ticketId, result.insertId]);
+        await connection.query(`UPDATE complaints SET ticket_id = ? WHERE id = ?`, [ticketId, result.insertId]);
 
         await connection.query(
-            `INSERT INTO Complaint_Messages (
+            `INSERT INTO complaint_messages (
                 complaint_id, sender_type, sender_user_id, message, attachments_json
             ) VALUES (?, ?, ?, ?, ?)`,
             [result.insertId, ['ADMIN', 'MANAGER'].includes(req.user.role) ? 'Admin' : 'Resident', req.user.id, description, JSON.stringify(attachments)]
         );
 
         await connection.query(
-            `INSERT INTO Complaint_Status_History (complaint_id, status, note, changed_by_user_id)
+            `INSERT INTO complaint_status_history (complaint_id, status, note, changed_by_user_id)
              VALUES (?, 'Open', 'Complaint created', ?)`,
             [result.insertId, req.user.id]
         );
@@ -456,22 +456,22 @@ exports.getComplaints = async (req, res) => {
                     SELECT GROUP_CONCAT(
                         CASE
                             WHEN ca.assignee_type = 'User' THEN u2.name
-                            WHEN ca.assignee_type = 'Staff' THEN s.name
+                            WHEN ca.assignee_type = 'staff' THEN s.name
                             WHEN ca.assignee_type = 'Committee' THEN co.name
                         END
                         ORDER BY ca.is_primary DESC, ca.assigned_at ASC
                         SEPARATOR ', '
                     )
-                    FROM Complaint_Assignees ca
-                    LEFT JOIN Users u2 ON u2.id = ca.user_id
-                    LEFT JOIN Staff s ON s.id = ca.staff_id
-                    LEFT JOIN Committees co ON co.id = ca.committee_id
+                    FROM complaint_assignees ca
+                    LEFT JOIN users u2 ON u2.id = ca.user_id
+                    LEFT JOIN staff s ON s.id = ca.staff_id
+                    LEFT JOIN committees co ON co.id = ca.committee_id
                     WHERE ca.complaint_id = c.id
                 ) AS assigned_summary
-             FROM Complaints c
-             LEFT JOIN Flats f ON f.id = c.flat_id
-             LEFT JOIN Users u ON u.id = c.created_by_user_id
-             LEFT JOIN Complaint_Categories cc ON cc.id = c.category_id
+             FROM complaints c
+             LEFT JOIN flats f ON f.id = c.flat_id
+             LEFT JOIN users u ON u.id = c.created_by_user_id
+             LEFT JOIN complaint_categories cc ON cc.id = c.category_id
              WHERE c.society_id = ?${accessClause}${whereFilters}
              ORDER BY c.created_at DESC`,
             [req.user.id, ...params]
@@ -507,7 +507,7 @@ exports.getComplaintDetail = async (req, res) => {
 
         const [[recurring]] = await db.query(
             `SELECT COUNT(*) AS total
-             FROM Complaints
+             FROM complaints
              WHERE flat_id = ? AND category_id = ? AND id <> ?`,
             [complaint.flat_id, complaint.category_id, complaintId]
         );
@@ -545,7 +545,7 @@ exports.updateComplaint = async (req, res) => {
         const resolutionNote = normalizeOptionalString(req.body.resolution_note);
 
         await db.query(
-            `UPDATE Complaints
+            `UPDATE complaints
              SET status = ?, priority = ?, category_id = ?, resolved_at = ?, closed_at = ?, sla_deadline = ?
              WHERE id = ? AND society_id = ?`,
             [
@@ -562,7 +562,7 @@ exports.updateComplaint = async (req, res) => {
 
         if (status !== complaint.status) {
             await db.query(
-                `INSERT INTO Complaint_Status_History (complaint_id, status, note, changed_by_user_id)
+                `INSERT INTO complaint_status_history (complaint_id, status, note, changed_by_user_id)
                  VALUES (?, ?, ?, ?)`,
                 [complaintId, status, resolutionNote || `Status changed to ${status}`, req.user.id]
             );
@@ -570,7 +570,7 @@ exports.updateComplaint = async (req, res) => {
 
         if (resolutionNote) {
             await db.query(
-                `INSERT INTO Complaint_Messages (complaint_id, sender_type, sender_user_id, message, attachments_json)
+                `INSERT INTO complaint_messages (complaint_id, sender_type, sender_user_id, message, attachments_json)
                  VALUES (?, 'Admin', ?, ?, '[]')`,
                 [complaintId, req.user.id, resolutionNote]
             );
@@ -600,15 +600,15 @@ exports.assignComplaint = async (req, res) => {
 
         const assignees = Array.isArray(req.body.assignees) ? req.body.assignees : [];
         await connection.beginTransaction();
-        await connection.query(`DELETE FROM Complaint_Assignees WHERE complaint_id = ?`, [complaintId]);
+        await connection.query(`DELETE FROM complaint_assignees WHERE complaint_id = ?`, [complaintId]);
 
         let primaryUserId = null;
 
         if (assignees.length > 0) {
             const values = assignees.map((assignee, index) => {
-                const assigneeType = ['User', 'Staff', 'Committee'].includes(assignee.assignee_type) ? assignee.assignee_type : 'User';
+                const assigneeType = ['User', 'staff', 'Committee'].includes(assignee.assignee_type) ? assignee.assignee_type : 'User';
                 const userId = assigneeType === 'User' ? Number(assignee.user_id) || null : null;
-                const staffId = assigneeType === 'Staff' ? Number(assignee.staff_id) || null : null;
+                const staffId = assigneeType === 'staff' ? Number(assignee.staff_id) || null : null;
                 const committeeId = assigneeType === 'Committee' ? Number(assignee.committee_id) || null : null;
                 const isPrimary = index === 0 || Boolean(assignee.is_primary);
 
@@ -620,16 +620,16 @@ exports.assignComplaint = async (req, res) => {
             });
 
             await connection.query(
-                `INSERT INTO Complaint_Assignees (
+                `INSERT INTO complaint_assignees (
                     complaint_id, assignee_type, user_id, staff_id, committee_id, is_primary, assigned_by_user_id
                 ) VALUES ?`,
                 [values]
             );
         }
 
-        await connection.query(`UPDATE Complaints SET assigned_to = ? WHERE id = ?`, [primaryUserId, complaintId]);
+        await connection.query(`UPDATE complaints SET assigned_to = ? WHERE id = ?`, [primaryUserId, complaintId]);
         await connection.query(
-            `INSERT INTO Complaint_Status_History (complaint_id, status, note, changed_by_user_id)
+            `INSERT INTO complaint_status_history (complaint_id, status, note, changed_by_user_id)
              VALUES (?, ?, 'Ticket assignment updated', ?)`,
             [complaintId, complaint.status, req.user.id]
         );
@@ -665,17 +665,17 @@ exports.addComplaintMessage = async (req, res) => {
         const message = normalizeOptionalString(req.body.message);
         const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
         const senderStaffId = ['ADMIN', 'MANAGER'].includes(req.user.role) ? Number(req.body.sender_staff_id) || null : null;
-        const senderType = senderStaffId ? 'Staff' : ['ADMIN', 'MANAGER'].includes(req.user.role) ? 'Admin' : 'Resident';
+        const senderType = senderStaffId ? 'staff' : ['ADMIN', 'MANAGER'].includes(req.user.role) ? 'Admin' : 'Resident';
 
         if (!message) {
             return res.status(400).json({ success: false, message: 'Message is required' });
         }
 
         await db.query(
-            `INSERT INTO Complaint_Messages (
+            `INSERT INTO complaint_messages (
                 complaint_id, sender_type, sender_user_id, sender_staff_id, message, attachments_json
             ) VALUES (?, ?, ?, ?, ?, ?)`,
-            [complaintId, senderType, senderType === 'Staff' ? null : req.user.id, senderStaffId, message, JSON.stringify(attachments)]
+            [complaintId, senderType, senderType === 'staff' ? null : req.user.id, senderStaffId, message, JSON.stringify(attachments)]
         );
 
         emitToRooms(
@@ -697,16 +697,16 @@ exports.getSummary = async (req, res) => {
         await runEscalationSweep(req.user.society_id);
 
         const [openRows, overdueRows, totalRows, categoryRows, staffRows] = await Promise.all([
-            db.query(`SELECT COUNT(*) AS total FROM Complaints WHERE society_id = ? AND status NOT IN ('Resolved', 'Closed')`, [req.user.society_id]),
-            db.query(`SELECT COUNT(*) AS total FROM Complaints WHERE society_id = ? AND status NOT IN ('Resolved', 'Closed') AND sla_deadline IS NOT NULL AND sla_deadline < NOW()`, [req.user.society_id]),
+            db.query(`SELECT COUNT(*) AS total FROM complaints WHERE society_id = ? AND status NOT IN ('Resolved', 'Closed')`, [req.user.society_id]),
+            db.query(`SELECT COUNT(*) AS total FROM complaints WHERE society_id = ? AND status NOT IN ('Resolved', 'Closed') AND sla_deadline IS NOT NULL AND sla_deadline < NOW()`, [req.user.society_id]),
             db.query(`SELECT 
                 COUNT(*) AS total_ever,
                 COUNT(CASE WHEN status IN ('Resolved', 'Closed') THEN 1 END) AS total_resolved
-             FROM Complaints WHERE society_id = ?`, [req.user.society_id]),
+             FROM complaints WHERE society_id = ?`, [req.user.society_id]),
             db.query(
                 `SELECT COALESCE(cc.name, c.category, 'Others') AS label, COUNT(*) AS total
-                 FROM Complaints c
-                 LEFT JOIN Complaint_Categories cc ON cc.id = c.category_id
+                 FROM complaints c
+                 LEFT JOIN complaint_categories cc ON cc.id = c.category_id
                  WHERE c.society_id = ? AND c.status NOT IN ('Resolved', 'Closed')
                  GROUP BY COALESCE(cc.name, c.category, 'Others')
                  ORDER BY total DESC`,
@@ -718,10 +718,10 @@ exports.getSummary = async (req, res) => {
                     s.type,
                     COUNT(DISTINCT ca.complaint_id) AS total_assigned,
                     COUNT(DISTINCT CASE WHEN c.status IN ('Resolved', 'Closed') THEN ca.complaint_id END) AS resolved_count
-                 FROM Complaint_Assignees ca
-                 JOIN Staff s ON s.id = ca.staff_id
-                 JOIN Complaints c ON c.id = ca.complaint_id
-                 WHERE c.society_id = ? AND ca.assignee_type = 'Staff'
+                 FROM complaint_assignees ca
+                 JOIN staff s ON s.id = ca.staff_id
+                 JOIN complaints c ON c.id = ca.complaint_id
+                 WHERE c.society_id = ? AND ca.assignee_type = 'staff'
                  GROUP BY s.id, s.name, s.type
                  ORDER BY total_assigned DESC, resolved_count DESC`,
                 [req.user.society_id]

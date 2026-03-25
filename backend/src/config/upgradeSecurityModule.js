@@ -1,7 +1,7 @@
 const db = require('./db');
 
 const statements = [
-    `CREATE TABLE IF NOT EXISTS Guard_Shifts (
+    `CREATE TABLE IF NOT EXISTS guard_shifts (
         id INT AUTO_INCREMENT PRIMARY KEY,
         society_id INT NOT NULL,
         security_staff_id INT NULL,
@@ -16,12 +16,12 @@ const statements = [
         created_by INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (society_id) REFERENCES Societies(id) ON DELETE CASCADE,
-        FOREIGN KEY (security_staff_id) REFERENCES Staff(id) ON DELETE SET NULL,
-        FOREIGN KEY (guard_user_id) REFERENCES Users(id) ON DELETE SET NULL,
-        FOREIGN KEY (created_by) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+        FOREIGN KEY (security_staff_id) REFERENCES staff(id) ON DELETE SET NULL,
+        FOREIGN KEY (guard_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS Security_Incidents (
+    `CREATE TABLE IF NOT EXISTS security_incidents (
         id INT AUTO_INCREMENT PRIMARY KEY,
         society_id INT NOT NULL,
         reported_by_user_id INT NULL,
@@ -39,13 +39,13 @@ const statements = [
         resolved_at DATETIME NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (society_id) REFERENCES Societies(id) ON DELETE CASCADE,
-        FOREIGN KEY (reported_by_user_id) REFERENCES Users(id) ON DELETE SET NULL,
-        FOREIGN KEY (assigned_guard_user_id) REFERENCES Users(id) ON DELETE SET NULL,
-        FOREIGN KEY (related_visitor_log_id) REFERENCES Visitor_Logs(id) ON DELETE SET NULL
+        FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+        FOREIGN KEY (reported_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (assigned_guard_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (related_visitor_log_id) REFERENCES visitor_logs(id) ON DELETE SET NULL
     )`,
-    `ALTER TABLE Guard_Shifts MODIFY COLUMN guard_user_id INT NULL`,
-    `ALTER TABLE Guard_Shifts ADD COLUMN IF NOT EXISTS security_staff_id INT NULL AFTER society_id`,
+    `ALTER TABLE guard_shifts MODIFY COLUMN guard_user_id INT NULL`,
+    `ALTER TABLE guard_shifts ADD COLUMN IF NOT EXISTS security_staff_id INT NULL AFTER society_id`,
 ];
 
 async function runUpgrade() {
@@ -57,7 +57,7 @@ async function runUpgrade() {
         }
 
         try {
-            await db.query(`ALTER TABLE Guard_Shifts ADD CONSTRAINT fk_guard_shifts_staff FOREIGN KEY (security_staff_id) REFERENCES Staff(id) ON DELETE SET NULL`);
+            await db.query(`ALTER TABLE guard_shifts ADD CONSTRAINT fk_guard_shifts_staff FOREIGN KEY (security_staff_id) REFERENCES staff(id) ON DELETE SET NULL`);
         } catch (error) {
             if (!String(error.message || '').includes('Duplicate') && !String(error.message || '').includes('already exists')) {
                 throw error;
@@ -65,8 +65,8 @@ async function runUpgrade() {
         }
 
         await db.query(
-            `UPDATE Guard_Shifts gs
-             LEFT JOIN Staff s ON s.linked_user_id = gs.guard_user_id
+            `UPDATE guard_shifts gs
+             LEFT JOIN staff s ON s.linked_user_id = gs.guard_user_id
              SET gs.security_staff_id = COALESCE(gs.security_staff_id, s.id)
              WHERE gs.security_staff_id IS NULL`
         );

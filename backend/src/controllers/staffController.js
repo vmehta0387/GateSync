@@ -80,7 +80,7 @@ function buildUploadedFilePayload(req, file) {
 async function getSocietyFlats(societyId) {
     const [flats] = await db.query(
         `SELECT id, block_name, flat_number
-         FROM Flats
+         FROM flats
          WHERE society_id = ?
          ORDER BY block_name ASC, flat_number ASC`,
         [societyId]
@@ -120,8 +120,8 @@ async function getStaffById(id, societyId) {
             s.resident_entry_notification,
             s.missed_visit_alerts,
             guard_user.status AS linked_guard_status
-         FROM Staff s
-         LEFT JOIN Users guard_user ON guard_user.id = s.linked_user_id
+         FROM staff s
+         LEFT JOIN users guard_user ON guard_user.id = s.linked_user_id
          WHERE s.id = ? AND s.society_id = ?`,
         [id, societyId]
     );
@@ -136,8 +136,8 @@ async function getFlatAssignments(staffIds) {
 
     const [rows] = await db.query(
         `SELECT sf.staff_id, f.id, f.block_name, f.flat_number
-         FROM Staff_Flats sf
-         INNER JOIN Flats f ON f.id = sf.flat_id
+         FROM staff_flats sf
+         INNER JOIN flats f ON f.id = sf.flat_id
          WHERE sf.staff_id IN (?) 
          ORDER BY f.block_name ASC, f.flat_number ASC`,
         [staffIds]
@@ -205,18 +205,18 @@ function mapStaffRow(row, assignedFlats = []) {
 }
 
 async function replaceStaffFlatAssignments(connection, staffId, flatIds) {
-    await connection.query(`DELETE FROM Staff_Flats WHERE staff_id = ?`, [staffId]);
+    await connection.query(`DELETE FROM staff_flats WHERE staff_id = ?`, [staffId]);
 
     if (flatIds.length > 0) {
         const values = flatIds.map((flatId) => [staffId, flatId]);
-        await connection.query(`INSERT INTO Staff_Flats (staff_id, flat_id) VALUES ?`, [values]);
+        await connection.query(`INSERT INTO staff_flats (staff_id, flat_id) VALUES ?`, [values]);
     }
 }
 
 async function getLinkedGuardUserByPhone(connection, societyId, phone) {
     const [rows] = await connection.query(
         `SELECT id, society_id, role, status, phone_number, name
-         FROM Users
+         FROM users
          WHERE phone_number = ?`,
         [phone]
     );
@@ -235,7 +235,7 @@ async function getLinkedGuardUserByPhone(connection, societyId, phone) {
 
 async function ensureGuardUserNotLinkedElsewhere(connection, userId, staffId) {
     const [rows] = await connection.query(
-        `SELECT id FROM Staff WHERE linked_user_id = ? AND id <> ? LIMIT 1`,
+        `SELECT id FROM staff WHERE linked_user_id = ? AND id <> ? LIMIT 1`,
         [userId, staffId]
     );
 
@@ -260,7 +260,7 @@ async function syncLinkedGuardUser(connection, { societyId, staffId, linkedUserI
         }
 
         await connection.query(
-            `UPDATE Users
+            `UPDATE users
              SET society_id = ?, name = ?, phone_number = ?, role = 'GUARD', status = ?
              WHERE id = ?`,
             [societyId, name, normalizedLoginPhone, shouldBeActive ? 'ACTIVE' : 'INACTIVE', linkedUserId]
@@ -277,7 +277,7 @@ async function syncLinkedGuardUser(connection, { societyId, staffId, linkedUserI
     }
     const nextUserId = linkedGuardUserId || (
         await connection.query(
-            `INSERT INTO Users (society_id, name, email, phone_number, role, status)
+            `INSERT INTO users (society_id, name, email, phone_number, role, status)
              VALUES (?, ?, '', ?, 'GUARD', ?)`,
             [societyId, name, normalizedLoginPhone, shouldBeActive ? 'ACTIVE' : 'INACTIVE']
         )
@@ -285,14 +285,14 @@ async function syncLinkedGuardUser(connection, { societyId, staffId, linkedUserI
 
     if (linkedGuardUserId) {
         await connection.query(
-            `UPDATE Users
+            `UPDATE users
              SET name = ?, status = ?
              WHERE id = ?`,
             [name, shouldBeActive ? 'ACTIVE' : 'INACTIVE', linkedGuardUserId]
         );
     }
 
-    await connection.query(`UPDATE Staff SET linked_user_id = ? WHERE id = ? AND society_id = ?`, [nextUserId, staffId, societyId]);
+    await connection.query(`UPDATE staff SET linked_user_id = ? WHERE id = ? AND society_id = ?`, [nextUserId, staffId, societyId]);
     return nextUserId;
 }
 
@@ -303,7 +303,7 @@ async function validateFlatAssignments(connection, societyId, flatIds) {
 
     const [rows] = await connection.query(
         `SELECT id
-         FROM Flats
+         FROM flats
          WHERE society_id = ? AND id IN (?)`,
         [societyId, flatIds]
     );
@@ -337,7 +337,7 @@ function validateStaffPayload(payload) {
     const assigned_flat_ids = normalizeFlatIds(payload.assigned_flat_ids);
 
     if (!type || !STAFF_TYPES.includes(type)) {
-        return { error: 'Staff type must be one of the supported values' };
+        return { error: 'staff type must be one of the supported values' };
     }
 
     if (!ASSIGNMENT_SCOPES.includes(assignment_scope)) {
@@ -345,7 +345,7 @@ function validateStaffPayload(payload) {
     }
 
     if (!name) {
-        return { error: 'Staff name is required' };
+        return { error: 'staff name is required' };
     }
 
     if (!phone || phone.length < 10 || phone.length > 15) {
@@ -433,7 +433,7 @@ exports.uploadStaffPhoto = async (req, res) => {
 
     return res.status(200).json({
         success: true,
-        message: 'Staff photo uploaded successfully',
+        message: 'staff photo uploaded successfully',
         file: buildUploadedFilePayload(req, req.file),
     });
 };
@@ -445,7 +445,7 @@ exports.uploadStaffDocument = async (req, res) => {
 
     return res.status(200).json({
         success: true,
-        message: 'Staff document uploaded successfully',
+        message: 'staff document uploaded successfully',
         file: buildUploadedFilePayload(req, req.file),
     });
 };
@@ -491,35 +491,35 @@ exports.getStaffDirectory = async (req, res) => {
                 ) AS late_entries,
                 (
                     SELECT sl_open.id
-                    FROM Staff_Logs sl_open
+                    FROM staff_logs sl_open
                     WHERE sl_open.staff_id = s.id AND sl_open.exit_time IS NULL
                     ORDER BY sl_open.entry_time DESC, sl_open.id DESC
                     LIMIT 1
                 ) AS active_log_id,
                 (
                     SELECT sl_open.entry_time
-                    FROM Staff_Logs sl_open
+                    FROM staff_logs sl_open
                     WHERE sl_open.staff_id = s.id AND sl_open.exit_time IS NULL
                     ORDER BY sl_open.entry_time DESC, sl_open.id DESC
                     LIMIT 1
                 ) AS active_entry_time,
                 (
                     SELECT sl_last.entry_time
-                    FROM Staff_Logs sl_last
+                    FROM staff_logs sl_last
                     WHERE sl_last.staff_id = s.id
                     ORDER BY sl_last.entry_time DESC, sl_last.id DESC
                     LIMIT 1
                 ) AS last_entry_time,
                 (
                     SELECT sl_last.exit_time
-                    FROM Staff_Logs sl_last
+                    FROM staff_logs sl_last
                     WHERE sl_last.staff_id = s.id
                     ORDER BY sl_last.entry_time DESC, sl_last.id DESC
                     LIMIT 1
                 ) AS last_exit_time
-            FROM Staff s
-            LEFT JOIN Users guard_user ON guard_user.id = s.linked_user_id
-            LEFT JOIN Staff_Logs sl ON sl.staff_id = s.id
+            FROM staff s
+            LEFT JOIN users guard_user ON guard_user.id = s.linked_user_id
+            LEFT JOIN staff_logs sl ON sl.staff_id = s.id
             WHERE s.society_id = ?
             GROUP BY s.id
             ORDER BY s.name ASC`,
@@ -562,8 +562,8 @@ exports.getStaffLogs = async (req, res) => {
                         THEN TRUE
                     ELSE FALSE
                 END AS is_late
-            FROM Staff_Logs sl
-            INNER JOIN Staff s ON s.id = sl.staff_id
+            FROM staff_logs sl
+            INNER JOIN staff s ON s.id = sl.staff_id
             WHERE s.society_id = ?${staffFilter}
             ORDER BY COALESCE(sl.entry_time, sl.exit_time) DESC, sl.id DESC
             LIMIT 200`,
@@ -597,7 +597,7 @@ exports.addStaff = async (req, res) => {
 
         const staffValues = validation.value;
         const [result] = await connection.query(
-            `INSERT INTO Staff (
+            `INSERT INTO staff (
                 society_id, type, assignment_scope, name, phone, guard_login_phone, profile_photo_url, is_blacklisted, blacklist_reason,
                 shift_timing, work_start_time, work_end_time, work_days,
                 allow_entry_without_approval, require_daily_approval, auto_entry_enabled,
@@ -655,7 +655,7 @@ exports.addStaff = async (req, res) => {
 
         return res.status(201).json({
             success: true,
-            message: 'Staff added successfully',
+            message: 'staff added successfully',
             staff: staffRow ? mapStaffRow(staffRow, flatAssignments.get(result.insertId) || []) : null,
         });
     } catch (error) {
@@ -679,7 +679,7 @@ exports.updateStaff = async (req, res) => {
         const existingStaff = await getStaffById(id, req.user.society_id);
 
         if (!existingStaff) {
-            return res.status(404).json({ success: false, message: 'Staff member not found' });
+            return res.status(404).json({ success: false, message: 'staff member not found' });
         }
 
         const validation = validateStaffPayload({
@@ -703,7 +703,7 @@ exports.updateStaff = async (req, res) => {
 
         const staffValues = validation.value;
         await connection.query(
-            `UPDATE Staff
+            `UPDATE staff
              SET type = ?, name = ?, phone = ?, guard_login_phone = ?, profile_photo_url = ?, is_blacklisted = ?, blacklist_reason = ?,
                  assignment_scope = ?,
                  shift_timing = ?, work_start_time = ?, work_end_time = ?, work_days = ?,
@@ -748,7 +748,7 @@ exports.updateStaff = async (req, res) => {
         if (existingStaff.linked_user_id) {
             if (staffValues.type !== 'Security') {
                 await connection.query(
-                    `UPDATE Users SET status = 'INACTIVE' WHERE id = ?`,
+                    `UPDATE users SET status = 'INACTIVE' WHERE id = ?`,
                     [existingStaff.linked_user_id]
                 );
             } else {
@@ -761,7 +761,7 @@ exports.updateStaff = async (req, res) => {
                     shouldBeActive: !staffValues.is_blacklisted,
                 });
                 await connection.query(
-                    `UPDATE Guard_Shifts
+                    `UPDATE guard_shifts
                      SET guard_user_id = ?
                      WHERE society_id = ? AND security_staff_id = ?`,
                     [existingStaff.linked_user_id, req.user.society_id, Number(id)]
@@ -776,7 +776,7 @@ exports.updateStaff = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: 'Staff updated successfully',
+            message: 'staff updated successfully',
             staff: updatedStaff ? mapStaffRow(updatedStaff, flatAssignments.get(Number(id)) || []) : null,
         });
     } catch (error) {
@@ -798,15 +798,15 @@ exports.deleteStaff = async (req, res) => {
         const existingStaff = await getStaffById(id, req.user.society_id);
 
         if (!existingStaff) {
-            return res.status(404).json({ success: false, message: 'Staff member not found' });
+            return res.status(404).json({ success: false, message: 'staff member not found' });
         }
 
         if (existingStaff.linked_user_id) {
-            await db.query(`UPDATE Users SET status = 'INACTIVE' WHERE id = ?`, [existingStaff.linked_user_id]);
+            await db.query(`UPDATE users SET status = 'INACTIVE' WHERE id = ?`, [existingStaff.linked_user_id]);
         }
 
-        await db.query(`DELETE FROM Staff WHERE id = ? AND society_id = ?`, [id, req.user.society_id]);
-        return res.status(200).json({ success: true, message: 'Staff removed successfully' });
+        await db.query(`DELETE FROM staff WHERE id = ? AND society_id = ?`, [id, req.user.society_id]);
+        return res.status(200).json({ success: true, message: 'staff removed successfully' });
     } catch (error) {
         console.error('deleteStaff error:', error);
         return res.status(500).json({ success: false, message: 'Server error removing staff' });
@@ -820,7 +820,7 @@ exports.enableGuardLogin = async (req, res) => {
         const staffId = Number(req.params.id);
         const existingStaff = await getStaffById(staffId, req.user.society_id);
         if (!existingStaff) {
-            return res.status(404).json({ success: false, message: 'Staff member not found' });
+            return res.status(404).json({ success: false, message: 'staff member not found' });
         }
 
         if (existingStaff.type !== 'Security') {
@@ -840,7 +840,7 @@ exports.enableGuardLogin = async (req, res) => {
         });
 
         await connection.query(
-            `UPDATE Guard_Shifts
+            `UPDATE guard_shifts
              SET guard_user_id = ?
              WHERE society_id = ? AND security_staff_id = ?`,
             [linkedUserId, req.user.society_id, staffId]
@@ -871,14 +871,14 @@ exports.disableGuardLogin = async (req, res) => {
         const staffId = Number(req.params.id);
         const existingStaff = await getStaffById(staffId, req.user.society_id);
         if (!existingStaff) {
-            return res.status(404).json({ success: false, message: 'Staff member not found' });
+            return res.status(404).json({ success: false, message: 'staff member not found' });
         }
 
         if (!existingStaff.linked_user_id) {
             return res.status(400).json({ success: false, message: 'This staff profile does not have guard login enabled' });
         }
 
-        await db.query(`UPDATE Users SET status = 'INACTIVE' WHERE id = ?`, [existingStaff.linked_user_id]);
+        await db.query(`UPDATE users SET status = 'INACTIVE' WHERE id = ?`, [existingStaff.linked_user_id]);
         return res.status(200).json({ success: true, message: 'Guard login disabled for this staff profile' });
     } catch (error) {
         console.error('disableGuardLogin error:', error);
@@ -895,7 +895,7 @@ exports.logStaffEntry = async (req, res) => {
 
         const staff = await getStaffById(staffId, req.user.society_id);
         if (!staff) {
-            return res.status(404).json({ success: false, message: 'Staff member not found' });
+            return res.status(404).json({ success: false, message: 'staff member not found' });
         }
 
         if (staff.is_blacklisted) {
@@ -907,7 +907,7 @@ exports.logStaffEntry = async (req, res) => {
         }
 
         const [openLogs] = await db.query(
-            `SELECT id FROM Staff_Logs WHERE staff_id = ? AND exit_time IS NULL ORDER BY entry_time DESC, id DESC LIMIT 1`,
+            `SELECT id FROM staff_logs WHERE staff_id = ? AND exit_time IS NULL ORDER BY entry_time DESC, id DESC LIMIT 1`,
             [staffId]
         );
 
@@ -915,10 +915,10 @@ exports.logStaffEntry = async (req, res) => {
             return res.status(400).json({ success: false, message: 'This staff member is already checked in' });
         }
 
-        const [result] = await db.query(`INSERT INTO Staff_Logs (staff_id, entry_time) VALUES (?, NOW())`, [staffId]);
+        const [result] = await db.query(`INSERT INTO staff_logs (staff_id, entry_time) VALUES (?, NOW())`, [staffId]);
         return res.status(200).json({
             success: true,
-            message: 'Staff entry logged',
+            message: 'staff entry logged',
             log_id: result.insertId,
         });
     } catch (error) {
@@ -941,8 +941,8 @@ exports.logStaffExit = async (req, res) => {
         if (logId) {
             const [logs] = await db.query(
                 `SELECT sl.id, sl.staff_id
-                 FROM Staff_Logs sl
-                 INNER JOIN Staff s ON s.id = sl.staff_id
+                 FROM staff_logs sl
+                 INNER JOIN staff s ON s.id = sl.staff_id
                  WHERE sl.id = ? AND s.society_id = ?`,
                 [logId, req.user.society_id]
             );
@@ -950,12 +950,12 @@ exports.logStaffExit = async (req, res) => {
         } else {
             const staff = await getStaffById(staffId, req.user.society_id);
             if (!staff) {
-                return res.status(404).json({ success: false, message: 'Staff member not found' });
+                return res.status(404).json({ success: false, message: 'staff member not found' });
             }
 
             const [logs] = await db.query(
                 `SELECT id, staff_id
-                 FROM Staff_Logs
+                 FROM staff_logs
                  WHERE staff_id = ? AND exit_time IS NULL
                  ORDER BY entry_time DESC, id DESC
                  LIMIT 1`,
@@ -968,8 +968,8 @@ exports.logStaffExit = async (req, res) => {
             return res.status(404).json({ success: false, message: 'No active staff check-in found' });
         }
 
-        await db.query(`UPDATE Staff_Logs SET exit_time = NOW() WHERE id = ?`, [log.id]);
-        return res.status(200).json({ success: true, message: 'Staff exit logged' });
+        await db.query(`UPDATE staff_logs SET exit_time = NOW() WHERE id = ?`, [log.id]);
+        return res.status(200).json({ success: true, message: 'staff exit logged' });
     } catch (error) {
         console.error('logExit error:', error);
         return res.status(500).json({ success: false, message: 'Server error logging staff exit' });

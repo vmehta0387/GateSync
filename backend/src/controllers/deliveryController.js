@@ -9,14 +9,14 @@ exports.getDeliveries = async (req, res) => {
 
         let query = `
             SELECT d.*, f.block_name, f.flat_number
-            FROM Deliveries d
-            JOIN Flats f ON d.flat_id = f.id
+            FROM deliveries d
+            JOIN flats f ON d.flat_id = f.id
             WHERE d.society_id = ?
         `;
         let queryParams = [society_id];
 
         if (role === 'RESIDENT') {
-            query += ` AND f.id IN (SELECT flat_id FROM User_Flats WHERE user_id = ?)`;
+            query += ` AND f.id IN (SELECT flat_id FROM user_flats WHERE user_id = ?)`;
             queryParams.push(userId);
         }
 
@@ -34,7 +34,7 @@ exports.getDeliveries = async (req, res) => {
 exports.createDelivery = async (req, res) => {
     try {
         const { flat_id, company_name, delivery_person } = req.body;
-        await db.query(`INSERT INTO Deliveries (society_id, flat_id, company_name, delivery_person, status) VALUES (?, ?, ?, ?, 'Expected')`, 
+        await db.query(`INSERT INTO deliveries (society_id, flat_id, company_name, delivery_person, status) VALUES (?, ?, ?, ?, 'Expected')`, 
             [req.user.society_id, flat_id, company_name, delivery_person]);
         return res.status(201).json({ success: true, message: 'Delivery expected logged successfully' });
     } catch (error) {
@@ -48,7 +48,7 @@ exports.updateDeliveryStatus = async (req, res) => {
         const { id } = req.params;
         const { status } = req.body; // 'Arrived', 'Delivered', 'Failed'
         
-        let query = `UPDATE Deliveries SET status = ? `;
+        let query = `UPDATE deliveries SET status = ? `;
         if (status === 'Arrived') query += `, entry_time = NOW() `;
         if (status === 'Delivered' || status === 'Failed') query += `, exit_time = NOW() `;
         query += `WHERE id = ? AND society_id = ?`;

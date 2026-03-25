@@ -164,7 +164,7 @@ const syncInvoiceFinancials = async (invoiceRows) => {
             toNumber(row.amount) !== snapshot.totalAmount
         ) {
             await db.query(
-                `UPDATE Invoices
+                `UPDATE invoices
                  SET invoice_number = ?, status = ?, penalty_amount = ?, adjustment_amount = ?, paid_amount = ?,
                      total_amount = ?, balance_amount = ?, amount = ?,
                      paid_at = CASE WHEN ? = 'Paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END
@@ -237,17 +237,17 @@ const fetchInvoiceRows = async ({ societyId, role, userId, filters = {}, invoice
             bc.title AS config_title,
             COALESCE(payments.payment_total, 0) AS payment_total,
             COALESCE(adjustments.adjustment_total, 0) AS adjustment_total
-         FROM Invoices i
-         INNER JOIN Flats f ON f.id = i.flat_id
-         ${role === 'RESIDENT' ? 'INNER JOIN User_Flats uf ON uf.flat_id = f.id' : 'LEFT JOIN User_Flats uf ON uf.flat_id = f.id'}
-         LEFT JOIN Billing_Configs bc ON bc.id = i.billing_config_id
+         FROM invoices i
+         INNER JOIN flats f ON f.id = i.flat_id
+         ${role === 'RESIDENT' ? 'INNER JOIN user_flats uf ON uf.flat_id = f.id' : 'LEFT JOIN user_flats uf ON uf.flat_id = f.id'}
+         LEFT JOIN billing_configs bc ON bc.id = i.billing_config_id
          LEFT JOIN (
             SELECT invoice_id, SUM(CASE WHEN status = 'Completed' THEN amount ELSE 0 END) AS payment_total
-            FROM Invoice_Payments GROUP BY invoice_id
+            FROM invoice_payments GROUP BY invoice_id
          ) payments ON payments.invoice_id = i.id
          LEFT JOIN (
             SELECT invoice_id, SUM(amount) AS adjustment_total
-            FROM Invoice_Adjustments GROUP BY invoice_id
+            FROM invoice_adjustments GROUP BY invoice_id
          ) adjustments ON adjustments.invoice_id = i.id
          WHERE ${whereClauses.join(' AND ')}
          GROUP BY i.id
@@ -265,9 +265,9 @@ const hydrateInvoices = async (invoiceRows) => {
     const placeholders = invoiceIds.map(() => '?').join(', ');
 
     const [[lineItems], [payments], [adjustments]] = await Promise.all([
-        db.query(`SELECT id, invoice_id, label, amount, calculation_mode, sort_order FROM Invoice_Line_Items WHERE invoice_id IN (${placeholders}) ORDER BY sort_order ASC, id ASC`, invoiceIds),
-        db.query(`SELECT id, invoice_id, amount, payment_method, payment_gateway, payment_reference, status, paid_at, notes FROM Invoice_Payments WHERE invoice_id IN (${placeholders}) ORDER BY paid_at DESC, id DESC`, invoiceIds),
-        db.query(`SELECT id, invoice_id, adjustment_type, amount, reason, created_at FROM Invoice_Adjustments WHERE invoice_id IN (${placeholders}) ORDER BY created_at DESC, id DESC`, invoiceIds),
+        db.query(`SELECT id, invoice_id, label, amount, calculation_mode, sort_order FROM invoice_line_items WHERE invoice_id IN (${placeholders}) ORDER BY sort_order ASC, id ASC`, invoiceIds),
+        db.query(`SELECT id, invoice_id, amount, payment_method, payment_gateway, payment_reference, status, paid_at, notes FROM invoice_payments WHERE invoice_id IN (${placeholders}) ORDER BY paid_at DESC, id DESC`, invoiceIds),
+        db.query(`SELECT id, invoice_id, adjustment_type, amount, reason, created_at FROM invoice_adjustments WHERE invoice_id IN (${placeholders}) ORDER BY created_at DESC, id DESC`, invoiceIds),
     ]);
 
     const itemMap = new Map();
@@ -442,7 +442,7 @@ const insertInvoiceWithItems = async ({ societyId, flat, monthYear, dueDate, not
     if (subtotalAmount <= 0) return null;
 
     const [result] = await db.query(
-        `INSERT INTO Invoices (
+        `INSERT INTO invoices (
             society_id, flat_id, billing_config_id, amount, month_year, status, due_date, late_fee, payment_method,
             invoice_number, billing_type, billing_frequency, calculation_method, invoice_date, generated_at,
             subtotal_amount, penalty_amount, adjustment_amount, total_amount, balance_amount, paid_amount,
@@ -469,11 +469,11 @@ const insertInvoiceWithItems = async ({ societyId, flat, monthYear, dueDate, not
 
     const invoiceId = result.insertId;
     const invoiceNumber = buildInvoiceNumber({ monthYear, flatId: flat.id, invoiceId });
-    await db.query(`UPDATE Invoices SET invoice_number = ? WHERE id = ?`, [invoiceNumber, invoiceId]);
+    await db.query(`UPDATE invoices SET invoice_number = ? WHERE id = ?`, [invoiceNumber, invoiceId]);
 
     if (lineItems.length) {
         await db.query(
-            `INSERT INTO Invoice_Line_Items (invoice_id, label, amount, calculation_mode, sort_order) VALUES ?`,
+            `INSERT INTO invoice_line_items (invoice_id, label, amount, calculation_mode, sort_order) VALUES ?`,
             [lineItems.map((item) => [invoiceId, item.label, item.amount, item.calculation_mode, item.sort_order])]
         );
     }
@@ -520,8 +520,8 @@ exports.getBillingSummary = async (req, res) => {
                     `SELECT f.id AS flat_id, f.block_name, f.flat_number,
                             COALESCE(SUM(i.balance_amount), 0) AS outstanding_amount,
                             COUNT(i.id) AS invoice_count
-                     FROM Invoices i
-                     INNER JOIN Flats f ON f.id = i.flat_id
+                     FROM invoices i
+                     INNER JOIN flats f ON f.id = i.flat_id
                      WHERE i.society_id = ? AND i.status IN ('Unpaid', 'Overdue', 'PartiallyPaid')
                      GROUP BY f.id, f.block_name, f.flat_number
                      HAVING outstanding_amount > 0
@@ -531,7 +531,7 @@ exports.getBillingSummary = async (req, res) => {
                 ),
                 db.query(
                     `SELECT month_year, COALESCE(SUM(paid_amount), 0) AS collected_amount, COALESCE(SUM(total_amount), 0) AS invoiced_amount
-                     FROM Invoices
+                     FROM invoices
                      WHERE society_id = ?
                      GROUP BY month_year
                      ORDER BY month_year DESC
@@ -580,8 +580,8 @@ exports.getBillingSummary = async (req, res) => {
 exports.getBillingConfigs = async (req, res) => {
     try {
         const [[configs], [flats]] = await Promise.all([
-            db.query(`SELECT * FROM Billing_Configs WHERE society_id = ? ORDER BY is_active DESC, title ASC`, [req.user.society_id]),
-            db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM Flats WHERE society_id = ? ORDER BY block_name ASC, flat_number ASC`, [req.user.society_id]),
+            db.query(`SELECT * FROM billing_configs WHERE society_id = ? ORDER BY is_active DESC, title ASC`, [req.user.society_id]),
+            db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM flats WHERE society_id = ? ORDER BY block_name ASC, flat_number ASC`, [req.user.society_id]),
         ]);
 
         return res.status(200).json({
@@ -638,7 +638,7 @@ exports.saveBillingConfig = async (req, res) => {
 
         if (configId) {
             await db.query(
-                `UPDATE Billing_Configs
+                `UPDATE billing_configs
                  SET title = ?, description = ?, billing_type = ?, frequency = ?, calculation_method = ?, base_amount = ?,
                      due_day = ?, auto_generate = ?, late_fee_type = ?, late_fee_value = ?, breakdown_json = ?, flat_type_amounts_json = ?,
                      reminder_days_json = ?, is_active = ?, updated_at = NOW()
@@ -649,7 +649,7 @@ exports.saveBillingConfig = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Billing_Configs (
+            `INSERT INTO billing_configs (
                 society_id, title, description, billing_type, frequency, calculation_method, base_amount,
                 due_day, auto_generate, late_fee_type, late_fee_value, breakdown_json, flat_type_amounts_json, reminder_days_json, is_active, created_by
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -671,7 +671,7 @@ exports.updateFlatBillingMeta = async (req, res) => {
         const flatType = normalizeOptionalString(req.body.flat_type);
 
         await db.query(
-            `UPDATE Flats SET flat_type = ?, area_sqft = ?, billing_custom_amount = ? WHERE id = ? AND society_id = ?`,
+            `UPDATE flats SET flat_type = ?, area_sqft = ?, billing_custom_amount = ? WHERE id = ? AND society_id = ?`,
             [flatType, areaSqft, customAmount, flatId, req.user.society_id]
         );
 
@@ -687,7 +687,7 @@ exports.generateInvoice = async (req, res) => {
         const configId = req.body.config_id ? Number(req.body.config_id) : null;
 
         if (configId) {
-            const [configs] = await db.query(`SELECT * FROM Billing_Configs WHERE id = ? AND society_id = ?`, [configId, req.user.society_id]);
+            const [configs] = await db.query(`SELECT * FROM billing_configs WHERE id = ? AND society_id = ?`, [configId, req.user.society_id]);
             const config = configs[0];
             if (!config) return res.status(404).json({ success: false, message: 'Billing rule not found' });
 
@@ -696,7 +696,7 @@ exports.generateInvoice = async (req, res) => {
                 return res.status(400).json({ success: false, message: 'Month must be in YYYY-MM format' });
             }
 
-            const [flats] = await db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM Flats WHERE society_id = ? ORDER BY block_name ASC, flat_number ASC`, [req.user.society_id]);
+            const [flats] = await db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM flats WHERE society_id = ? ORDER BY block_name ASC, flat_number ASC`, [req.user.society_id]);
             const dueDate = req.body.due_date ? formatDate(req.body.due_date) : `${monthYear}-${String(config.due_day || 10).padStart(2, '0')}`;
 
             let generated = 0;
@@ -704,7 +704,7 @@ exports.generateInvoice = async (req, res) => {
             const skippedFlats = [];
 
             for (const flat of flats) {
-                const [existing] = await db.query(`SELECT id FROM Invoices WHERE society_id = ? AND flat_id = ? AND month_year = ? AND billing_config_id = ? LIMIT 1`, [req.user.society_id, flat.id, monthYear, config.id]);
+                const [existing] = await db.query(`SELECT id FROM invoices WHERE society_id = ? AND flat_id = ? AND month_year = ? AND billing_config_id = ? LIMIT 1`, [req.user.society_id, flat.id, monthYear, config.id]);
                 if (existing.length) {
                     skipped += 1;
                     skippedFlats.push(`${flat.block_name}-${flat.flat_number} (already generated)`);
@@ -750,7 +750,7 @@ exports.generateInvoice = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Flat, amount, month, due date, and valid billing type are required' });
         }
 
-        const [flats] = await db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM Flats WHERE id = ? AND society_id = ?`, [flatId, req.user.society_id]);
+        const [flats] = await db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM flats WHERE id = ? AND society_id = ?`, [flatId, req.user.society_id]);
         const flat = flats[0];
         if (!flat) return res.status(404).json({ success: false, message: 'Flat not found' });
 
@@ -793,7 +793,7 @@ exports.payInvoice = async (req, res) => {
         if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found' });
 
         if (req.user.role === 'RESIDENT') {
-            const [allowed] = await db.query(`SELECT 1 FROM User_Flats WHERE user_id = ? AND flat_id = ? LIMIT 1`, [req.user.id, invoice.flat_id]);
+            const [allowed] = await db.query(`SELECT 1 FROM user_flats WHERE user_id = ? AND flat_id = ? LIMIT 1`, [req.user.id, invoice.flat_id]);
             if (!allowed.length) {
                 return res.status(403).json({ success: false, message: 'You can only pay invoices for your own flat' });
             }
@@ -808,11 +808,11 @@ exports.payInvoice = async (req, res) => {
         if (paymentAmount <= 0) return res.status(400).json({ success: false, message: 'A valid payment amount is required' });
 
         await db.query(
-            `INSERT INTO Invoice_Payments (invoice_id, amount, payment_method, payment_gateway, payment_reference, paid_by_user_id, status, paid_at, notes)
+            `INSERT INTO invoice_payments (invoice_id, amount, payment_method, payment_gateway, payment_reference, paid_by_user_id, status, paid_at, notes)
              VALUES (?, ?, ?, ?, ?, ?, 'Completed', NOW(), ?)`,
             [invoiceId, paymentAmount, normalizeOptionalString(req.body.payment_method) || 'Online', normalizeOptionalString(req.body.payment_gateway) || 'MockGateway', paymentReference, req.user.id, normalizeOptionalString(req.body.notes)]
         );
-        await db.query(`UPDATE Invoices SET payment_method = ?, payment_reference = ? WHERE id = ?`, [normalizeOptionalString(req.body.payment_method) || 'Online', paymentReference, invoiceId]);
+        await db.query(`UPDATE invoices SET payment_method = ?, payment_reference = ? WHERE id = ?`, [normalizeOptionalString(req.body.payment_method) || 'Online', paymentReference, invoiceId]);
         await fetchInvoiceRows({ societyId: req.user.society_id, role: 'ADMIN', userId: req.user.id, invoiceId });
 
         return res.status(200).json({ success: true, message: 'Payment recorded successfully' });
@@ -837,7 +837,7 @@ exports.adjustInvoice = async (req, res) => {
         if (amount <= 0) return res.status(400).json({ success: false, message: 'Adjustment amount must be greater than zero' });
 
         await db.query(
-            `INSERT INTO Invoice_Adjustments (invoice_id, adjustment_type, amount, reason, created_by)
+            `INSERT INTO invoice_adjustments (invoice_id, adjustment_type, amount, reason, created_by)
              VALUES (?, ?, ?, ?, ?)`,
             [invoiceId, adjustmentType, amount, normalizeOptionalString(req.body.reason), req.user.id]
         );
@@ -866,8 +866,8 @@ exports.getBillingReports = async (req, res) => {
         const [flatDues] = await db.query(
             `SELECT f.id AS flat_id, f.block_name, f.flat_number, COALESCE(SUM(i.balance_amount), 0) AS pending_amount,
                     COUNT(CASE WHEN i.status = 'Overdue' THEN 1 END) AS overdue_count
-             FROM Invoices i
-             INNER JOIN Flats f ON f.id = i.flat_id
+             FROM invoices i
+             INNER JOIN flats f ON f.id = i.flat_id
              WHERE i.society_id = ? AND i.status IN ('Unpaid', 'Overdue', 'PartiallyPaid')
              GROUP BY f.id, f.block_name, f.flat_number
              ORDER BY pending_amount DESC, overdue_count DESC`,

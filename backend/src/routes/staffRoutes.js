@@ -21,7 +21,7 @@ router.post('/:id/disable-guard-login', authorize('ADMIN', 'SUPERADMIN', 'MANAGE
 router.put('/:id', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), staffController.updateStaff);
 router.delete('/:id', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), staffController.deleteStaff);
 
-// Staff access logs
+// staff access logs
 router.post('/log-entry', authorize('GUARD', 'ADMIN'), staffController.logStaffEntry);
 router.post('/log-exit', authorize('GUARD', 'ADMIN'), staffController.logStaffExit);
 

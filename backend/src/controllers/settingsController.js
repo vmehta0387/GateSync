@@ -18,7 +18,7 @@ exports.getManagers = async (req, res) => {
     try {
         const [managers] = await db.query(
             `SELECT id, name, email, phone_number, status, created_at
-             FROM Users
+             FROM users
              WHERE society_id = ? AND role = 'MANAGER'
              ORDER BY created_at DESC, id DESC`,
             [req.user.society_id]
@@ -56,13 +56,13 @@ exports.createManager = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid manager status' });
         }
 
-        const [existingUsers] = await db.query('SELECT id FROM Users WHERE phone_number = ?', [phone_number]);
+        const [existingUsers] = await db.query('SELECT id FROM users WHERE phone_number = ?', [phone_number]);
         if (existingUsers.length > 0) {
             return res.status(409).json({ success: false, message: 'This phone number is already linked to another user account' });
         }
 
         const [result] = await db.query(
-            `INSERT INTO Users (society_id, name, email, phone_number, role, status)
+            `INSERT INTO users (society_id, name, email, phone_number, role, status)
              VALUES (?, ?, ?, ?, 'MANAGER', ?)`,
             [req.user.society_id, name, email, phone_number, status]
         );
@@ -87,7 +87,7 @@ exports.updateManager = async (req, res) => {
         const status = String(req.body.status || 'ACTIVE').trim().toUpperCase();
 
         const [managers] = await db.query(
-            `SELECT id FROM Users WHERE id = ? AND society_id = ? AND role = 'MANAGER' LIMIT 1`,
+            `SELECT id FROM users WHERE id = ? AND society_id = ? AND role = 'MANAGER' LIMIT 1`,
             [managerId, req.user.society_id]
         );
 
@@ -108,7 +108,7 @@ exports.updateManager = async (req, res) => {
         }
 
         const [duplicateUsers] = await db.query(
-            'SELECT id FROM Users WHERE phone_number = ? AND id <> ? LIMIT 1',
+            'SELECT id FROM users WHERE phone_number = ? AND id <> ? LIMIT 1',
             [phone_number, managerId]
         );
 
@@ -117,7 +117,7 @@ exports.updateManager = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE Users
+            `UPDATE users
              SET name = ?, email = ?, phone_number = ?, status = ?
              WHERE id = ? AND society_id = ? AND role = 'MANAGER'`,
             [name, email, phone_number, status, managerId, req.user.society_id]
@@ -132,7 +132,7 @@ exports.updateManager = async (req, res) => {
 
 exports.getSettings = async (req, res) => {
     try {
-        const [society] = await db.query(`SELECT config_settings FROM Societies WHERE id = ?`, [req.user.society_id]);
+        const [society] = await db.query(`SELECT config_settings FROM societies WHERE id = ?`, [req.user.society_id]);
         return res.status(200).json({
             success: true,
             settings: normalizeSettings(society[0]?.config_settings)
@@ -147,7 +147,7 @@ exports.updateSettings = async (req, res) => {
     try {
         const settings = req.body.settings ?? req.body.config_settings ?? {};
         await db.query(
-            `UPDATE Societies SET config_settings = ? WHERE id = ?`,
+            `UPDATE societies SET config_settings = ? WHERE id = ?`,
             [JSON.stringify(settings), req.user.society_id]
         );
         return res.status(200).json({ success: true, message: 'Settings updated successfully' });

@@ -111,7 +111,7 @@ const mapIncidentRow = (row) => ({
 
 const ensureGuard = async (societyId, userId) => {
     const [rows] = await db.query(
-        `SELECT id, name FROM Users WHERE id = ? AND society_id = ? AND role = 'GUARD' AND status = 'ACTIVE'`,
+        `SELECT id, name FROM users WHERE id = ? AND society_id = ? AND role = 'GUARD' AND status = 'ACTIVE'`,
         [userId, societyId]
     );
     return rows[0] || null;
@@ -120,7 +120,7 @@ const ensureGuard = async (societyId, userId) => {
 const getSecurityStaffById = async (societyId, staffId) => {
     const [rows] = await db.query(
         `SELECT id, society_id, linked_user_id, name, phone, guard_login_phone, profile_photo_url, is_blacklisted, shift_timing, work_start_time, work_end_time
-         FROM Staff
+         FROM staff
          WHERE id = ? AND society_id = ? AND type = 'Security'`,
         [staffId, societyId]
     );
@@ -130,7 +130,7 @@ const getSecurityStaffById = async (societyId, staffId) => {
 const ensureGuardUserForSecurityStaff = async (connection, staff) => {
     if (staff.linked_user_id) {
         await connection.query(
-            `UPDATE Users
+            `UPDATE users
              SET society_id = ?, name = ?, phone_number = ?, role = 'GUARD', status = ?
              WHERE id = ?`,
             [staff.society_id, staff.name, staff.phone, staff.is_blacklisted ? 'INACTIVE' : 'ACTIVE', staff.linked_user_id]
@@ -140,7 +140,7 @@ const ensureGuardUserForSecurityStaff = async (connection, staff) => {
 
     const [users] = await connection.query(
         `SELECT id, society_id, role
-         FROM Users
+         FROM users
          WHERE phone_number = ?`,
         [staff.phone]
     );
@@ -152,28 +152,28 @@ const ensureGuardUserForSecurityStaff = async (connection, staff) => {
         }
 
         await connection.query(
-            `UPDATE Users
+            `UPDATE users
              SET name = ?, status = ?
              WHERE id = ?`,
             [staff.name, staff.is_blacklisted ? 'INACTIVE' : 'ACTIVE', user.id]
         );
-        await connection.query(`UPDATE Staff SET linked_user_id = ? WHERE id = ?`, [user.id, staff.id]);
+        await connection.query(`UPDATE staff SET linked_user_id = ? WHERE id = ?`, [user.id, staff.id]);
         return user.id;
     }
 
     const [result] = await connection.query(
-        `INSERT INTO Users (society_id, name, email, phone_number, role, status)
+        `INSERT INTO users (society_id, name, email, phone_number, role, status)
          VALUES (?, ?, '', ?, 'GUARD', ?)`,
         [staff.society_id, staff.name, staff.phone, staff.is_blacklisted ? 'INACTIVE' : 'ACTIVE']
     );
 
-    await connection.query(`UPDATE Staff SET linked_user_id = ? WHERE id = ?`, [result.insertId, staff.id]);
+    await connection.query(`UPDATE staff SET linked_user_id = ? WHERE id = ?`, [result.insertId, staff.id]);
     return result.insertId;
 };
 
 const insertGuardActivity = async ({ guardId, actionType, description }) => {
     await db.query(
-        `INSERT INTO Guard_Activity (guard_id, action_type, description) VALUES (?, ?, ?)`,
+        `INSERT INTO guard_activity (guard_id, action_type, description) VALUES (?, ?, ?)`,
         [guardId, actionType, normalizeOptionalString(description)]
     );
 };
@@ -193,8 +193,8 @@ exports.getSecurityMeta = async (req, res) => {
                 s.linked_user_id AS guard_user_id,
                 CASE WHEN s.linked_user_id IS NULL THEN FALSE ELSE TRUE END AS has_guard_login,
                 COALESCE(u.status, 'INACTIVE') AS guard_status
-             FROM Staff s
-             LEFT JOIN Users u ON u.id = s.linked_user_id
+             FROM staff s
+             LEFT JOIN users u ON u.id = s.linked_user_id
              WHERE s.society_id = ? AND s.type = 'Security'
              ORDER BY name ASC`,
             [req.user.society_id]
@@ -215,7 +215,7 @@ exports.getSecuritySummary = async (req, res) => {
             `SELECT
                 COUNT(CASE WHEN role = 'GUARD' THEN 1 END) AS total_guards,
                 COUNT(CASE WHEN role = 'GUARD' AND status = 'ACTIVE' THEN 1 END) AS active_guard_profiles
-             FROM Users
+             FROM users
              WHERE society_id = ?`,
             [societyId]
         );
@@ -225,7 +225,7 @@ exports.getSecuritySummary = async (req, res) => {
                 COUNT(CASE WHEN status = 'OnDuty' THEN 1 END) AS guards_on_duty,
                 COUNT(CASE WHEN DATE(scheduled_start) = CURDATE() THEN 1 END) AS shifts_today,
                 COUNT(CASE WHEN status = 'Missed' THEN 1 END) AS missed_shifts
-             FROM Guard_Shifts
+             FROM guard_shifts
              WHERE society_id = ?`,
             [societyId]
         );
@@ -234,7 +234,7 @@ exports.getSecuritySummary = async (req, res) => {
             `SELECT
                 COUNT(CASE WHEN status IN ('Open', 'InReview') THEN 1 END) AS open_incidents,
                 COUNT(CASE WHEN severity = 'Critical' AND status IN ('Open', 'InReview') THEN 1 END) AS critical_incidents
-             FROM Security_Incidents
+             FROM security_incidents
              WHERE society_id = ?`,
             [societyId]
         );
@@ -243,8 +243,8 @@ exports.getSecuritySummary = async (req, res) => {
             `SELECT
                 COUNT(CASE WHEN action_type = 'Mistake' AND DATE(timestamp) = CURDATE() THEN 1 END) AS mistakes_today,
                 COUNT(CASE WHEN action_type = 'Patrol' AND DATE(timestamp) = CURDATE() THEN 1 END) AS patrols_today
-             FROM Guard_Activity ga
-             INNER JOIN Users u ON u.id = ga.guard_id
+             FROM guard_activity ga
+             INNER JOIN users u ON u.id = ga.guard_id
              WHERE u.society_id = ?`,
             [societyId]
         );
@@ -273,8 +273,8 @@ exports.getGuardLogs = async (req, res) => {
     try {
         const [logs] = await db.query(
             `SELECT ga.*, u.name AS guard_name
-             FROM Guard_Activity ga
-             JOIN Users u ON ga.guard_id = u.id
+             FROM guard_activity ga
+             JOIN users u ON ga.guard_id = u.id
              WHERE u.society_id = ?
              ORDER BY ga.timestamp DESC
              LIMIT 100`,
@@ -337,10 +337,10 @@ exports.getGuardShifts = async (req, res) => {
                 s.profile_photo_url AS security_staff_photo_url,
                 s.guard_login_phone,
                 creator.name AS created_by_name
-             FROM Guard_Shifts gs
-             LEFT JOIN Users g ON g.id = gs.guard_user_id
-             LEFT JOIN Staff s ON s.id = gs.security_staff_id
-             LEFT JOIN Users creator ON creator.id = gs.created_by
+             FROM guard_shifts gs
+             LEFT JOIN users g ON g.id = gs.guard_user_id
+             LEFT JOIN staff s ON s.id = gs.security_staff_id
+             LEFT JOIN users creator ON creator.id = gs.created_by
              ${whereClause}
              ORDER BY gs.scheduled_start DESC
              LIMIT 100`,
@@ -382,14 +382,14 @@ exports.createGuardShift = async (req, res) => {
             }
 
             const [staffRows] = await db.query(
-                `SELECT id FROM Staff WHERE society_id = ? AND linked_user_id = ? LIMIT 1`,
+                `SELECT id FROM staff WHERE society_id = ? AND linked_user_id = ? LIMIT 1`,
                 [req.user.society_id, requestedGuardUserId]
             );
             resolvedSecurityStaffId = staffRows[0]?.id || null;
         }
 
         const [result] = await db.query(
-            `INSERT INTO Guard_Shifts (
+            `INSERT INTO guard_shifts (
                 society_id, security_staff_id, guard_user_id, shift_label, scheduled_start,
                 scheduled_end, status, notes, created_by
              ) VALUES (?, ?, ?, ?, ?, ?, 'Scheduled', ?, ?)`,
@@ -422,7 +422,7 @@ exports.updateGuardShift = async (req, res) => {
     try {
         const shiftId = Number(req.params.id);
         const [rows] = await db.query(
-            `SELECT * FROM Guard_Shifts WHERE id = ? AND society_id = ?`,
+            `SELECT * FROM guard_shifts WHERE id = ? AND society_id = ?`,
             [shiftId, req.user.society_id]
         );
 
@@ -458,7 +458,7 @@ exports.updateGuardShift = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE Guard_Shifts
+            `UPDATE guard_shifts
              SET security_staff_id = ?, guard_user_id = ?, shift_label = ?, scheduled_start = ?, scheduled_end = ?, status = ?, notes = ?
              WHERE id = ? AND society_id = ?`,
             [
@@ -491,7 +491,7 @@ exports.startGuardShift = async (req, res) => {
     try {
         const shiftId = Number(req.params.id);
         const [rows] = await db.query(
-            `SELECT * FROM Guard_Shifts WHERE id = ? AND society_id = ?`,
+            `SELECT * FROM guard_shifts WHERE id = ? AND society_id = ?`,
             [shiftId, req.user.society_id]
         );
 
@@ -505,7 +505,7 @@ exports.startGuardShift = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE Guard_Shifts
+            `UPDATE guard_shifts
              SET status = 'OnDuty', actual_start = COALESCE(actual_start, NOW())
              WHERE id = ? AND society_id = ?`,
             [shiftId, req.user.society_id]
@@ -536,7 +536,7 @@ exports.endGuardShift = async (req, res) => {
     try {
         const shiftId = Number(req.params.id);
         const [rows] = await db.query(
-            `SELECT * FROM Guard_Shifts WHERE id = ? AND society_id = ?`,
+            `SELECT * FROM guard_shifts WHERE id = ? AND society_id = ?`,
             [shiftId, req.user.society_id]
         );
 
@@ -550,7 +550,7 @@ exports.endGuardShift = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE Guard_Shifts
+            `UPDATE guard_shifts
              SET status = 'Completed', actual_end = NOW(), actual_start = COALESCE(actual_start, NOW())
              WHERE id = ? AND society_id = ?`,
             [shiftId, req.user.society_id]
@@ -597,9 +597,9 @@ exports.getSecurityIncidents = async (req, res) => {
                 si.*,
                 reporter.name AS reporter_name,
                 assigned.name AS assigned_guard_name
-             FROM Security_Incidents si
-             LEFT JOIN Users reporter ON reporter.id = si.reported_by_user_id
-             LEFT JOIN Users assigned ON assigned.id = si.assigned_guard_user_id
+             FROM security_incidents si
+             LEFT JOIN users reporter ON reporter.id = si.reported_by_user_id
+             LEFT JOIN users assigned ON assigned.id = si.assigned_guard_user_id
              ${whereClause}
              ORDER BY si.occurred_at DESC
              LIMIT 100`,
@@ -637,7 +637,7 @@ exports.createSecurityIncident = async (req, res) => {
 
         const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
         const [result] = await db.query(
-            `INSERT INTO Security_Incidents (
+            `INSERT INTO security_incidents (
                 society_id, reported_by_user_id, assigned_guard_user_id, title, category, severity,
                 status, location, description, attachments_json, resolution_note, related_visitor_log_id, occurred_at
              ) VALUES (?, ?, ?, ?, ?, ?, 'Open', ?, ?, ?, ?, ?, ?)`,
@@ -682,7 +682,7 @@ exports.updateSecurityIncident = async (req, res) => {
     try {
         const incidentId = Number(req.params.id);
         const [rows] = await db.query(
-            `SELECT * FROM Security_Incidents WHERE id = ? AND society_id = ?`,
+            `SELECT * FROM security_incidents WHERE id = ? AND society_id = ?`,
             [incidentId, req.user.society_id]
         );
 
@@ -708,7 +708,7 @@ exports.updateSecurityIncident = async (req, res) => {
         }
 
         await db.query(
-            `UPDATE Security_Incidents
+            `UPDATE security_incidents
              SET assigned_guard_user_id = ?,
                  status = ?,
                  resolution_note = ?,

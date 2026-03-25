@@ -2,7 +2,7 @@ const path = require('path');
 const db = require('../config/db');
 
 const NOTICE_TYPES = ['General', 'Urgent', 'Event', 'Maintenance', 'Emergency'];
-const AUDIENCE_TYPES = ['AllResidents', 'Tower', 'Flats', 'Occupancy', 'Defaulters', 'Committee', 'Guards', 'CustomUsers'];
+const AUDIENCE_TYPES = ['AllResidents', 'Tower', 'flats', 'Occupancy', 'Defaulters', 'Committee', 'Guards', 'CustomUsers'];
 const DOCUMENT_CATEGORIES = ['Rules', 'Minutes', 'Bills', 'Forms', 'Other'];
 const POLL_TYPES = ['YesNo', 'SingleChoice'];
 
@@ -138,9 +138,9 @@ const getAudienceQuery = ({ societyId, audienceType, filters = {} }) => {
     const params = [societyId];
     let query = `
         SELECT DISTINCT u.id, u.name, u.phone_number, u.role, f.block_name, f.flat_number, uf.type AS occupancy_type
-        FROM Users u
-        LEFT JOIN User_Flats uf ON uf.user_id = u.id
-        LEFT JOIN Flats f ON f.id = uf.flat_id
+        FROM users u
+        LEFT JOIN user_flats uf ON uf.user_id = u.id
+        LEFT JOIN flats f ON f.id = uf.flat_id
         WHERE u.society_id = ?
     `;
 
@@ -153,7 +153,7 @@ const getAudienceQuery = ({ societyId, audienceType, filters = {} }) => {
         }
         query += ` AND u.role = 'RESIDENT' AND f.block_name IN (${blocks.map(() => '?').join(',')})`;
         params.push(...blocks);
-    } else if (audienceType === 'Flats') {
+    } else if (audienceType === 'flats') {
         const flatIds = Array.isArray(filters.flat_ids) ? filters.flat_ids.map(Number).filter(Boolean) : [];
         if (flatIds.length === 0) {
             return { query: `${query} AND 1 = 0`, params };
@@ -169,18 +169,18 @@ const getAudienceQuery = ({ societyId, audienceType, filters = {} }) => {
         params.push(...occupancyTypes);
     } else if (audienceType === 'Defaulters') {
         query += ` AND u.role = 'RESIDENT' AND uf.flat_id IN (
-            SELECT DISTINCT flat_id FROM Invoices WHERE society_id = ? AND status IN ('Unpaid', 'Overdue', 'PartiallyPaid')
+            SELECT DISTINCT flat_id FROM invoices WHERE society_id = ? AND status IN ('Unpaid', 'Overdue', 'PartiallyPaid')
         )`;
         params.push(societyId);
     } else if (audienceType === 'Committee') {
         const committeeIds = Array.isArray(filters.committee_ids) ? filters.committee_ids.map(Number).filter(Boolean) : [];
         query = `
             SELECT DISTINCT u.id, u.name, u.phone_number, u.role, f.block_name, f.flat_number, uf.type AS occupancy_type
-            FROM Committee_Members cm
-            JOIN Committees c ON c.id = cm.committee_id
-            JOIN Users u ON u.id = cm.user_id
-            LEFT JOIN User_Flats uf ON uf.user_id = u.id
-            LEFT JOIN Flats f ON f.id = uf.flat_id
+            FROM committee_members cm
+            JOIN committees c ON c.id = cm.committee_id
+            JOIN users u ON u.id = cm.user_id
+            LEFT JOIN user_flats uf ON uf.user_id = u.id
+            LEFT JOIN flats f ON f.id = uf.flat_id
             WHERE c.society_id = ? AND cm.status = 'Active'
         `;
         params.length = 0;
@@ -213,25 +213,25 @@ const resolveAudienceUsers = async ({ societyId, audienceType, filters }) => {
 
 const fetchTargets = async (societyId) => {
     const [towers, flats, residents, guards, defaulters, committees] = await Promise.all([
-        db.query(`SELECT DISTINCT block_name FROM Flats WHERE society_id = ? ORDER BY block_name`, [societyId]),
-        db.query(`SELECT id, block_name, flat_number FROM Flats WHERE society_id = ? ORDER BY block_name, flat_number`, [societyId]),
+        db.query(`SELECT DISTINCT block_name FROM flats WHERE society_id = ? ORDER BY block_name`, [societyId]),
+        db.query(`SELECT id, block_name, flat_number FROM flats WHERE society_id = ? ORDER BY block_name, flat_number`, [societyId]),
         db.query(`
             SELECT DISTINCT u.id, u.name, u.phone_number, uf.type AS occupancy_type, f.block_name, f.flat_number
-            FROM Users u
-            LEFT JOIN User_Flats uf ON uf.user_id = u.id
-            LEFT JOIN Flats f ON f.id = uf.flat_id
+            FROM users u
+            LEFT JOIN user_flats uf ON uf.user_id = u.id
+            LEFT JOIN flats f ON f.id = uf.flat_id
             WHERE u.society_id = ? AND u.role = 'RESIDENT'
             ORDER BY f.block_name, f.flat_number, u.name
         `, [societyId]),
-        db.query(`SELECT id, name, phone_number FROM Users WHERE society_id = ? AND role = 'GUARD' ORDER BY name`, [societyId]),
+        db.query(`SELECT id, name, phone_number FROM users WHERE society_id = ? AND role = 'GUARD' ORDER BY name`, [societyId]),
         db.query(`
             SELECT DISTINCT u.id
-            FROM Users u
-            JOIN User_Flats uf ON uf.user_id = u.id
-            JOIN Invoices i ON i.flat_id = uf.flat_id
+            FROM users u
+            JOIN user_flats uf ON uf.user_id = u.id
+            JOIN invoices i ON i.flat_id = uf.flat_id
             WHERE u.society_id = ? AND u.role = 'RESIDENT' AND i.status IN ('Unpaid', 'Overdue', 'PartiallyPaid')
         `, [societyId]),
-        db.query(`SELECT id, name, committee_type FROM Committees WHERE society_id = ? AND status = 'Active' ORDER BY name`, [societyId]),
+        db.query(`SELECT id, name, committee_type FROM committees WHERE society_id = ? AND status = 'Active' ORDER BY name`, [societyId]),
     ]);
 
     return {
@@ -253,19 +253,19 @@ exports.getHubOverview = async (req, res) => {
     try {
         const { society_id: societyId } = req.user;
         const [noticeCount, unreadMessages, urgentNotices, activePolls, scheduledEvents, documentCount, recentItems, targets] = await Promise.all([
-            db.query(`SELECT COUNT(*) AS total FROM Notices WHERE society_id = ? AND status IN ('Published', 'Scheduled')`, [societyId]),
-            db.query(`SELECT COUNT(*) AS total FROM Messages WHERE society_id = ? AND receiver_id = ? AND is_read = FALSE`, [societyId, req.user.id]),
-            db.query(`SELECT COUNT(*) AS total FROM Notices WHERE society_id = ? AND (notice_type IN ('Urgent', 'Emergency') OR is_pinned = TRUE)`, [societyId]),
-            db.query(`SELECT COUNT(*) AS total FROM Communication_Polls WHERE society_id = ? AND status IN ('Draft', 'Live')`, [societyId]),
-            db.query(`SELECT COUNT(*) AS total FROM Community_Events WHERE society_id = ? AND status IN ('Draft', 'Scheduled', 'Live')`, [societyId]),
-            db.query(`SELECT COUNT(*) AS total FROM Shared_Documents WHERE society_id = ?`, [societyId]),
+            db.query(`SELECT COUNT(*) AS total FROM notices WHERE society_id = ? AND status IN ('Published', 'Scheduled')`, [societyId]),
+            db.query(`SELECT COUNT(*) AS total FROM messages WHERE society_id = ? AND receiver_id = ? AND is_read = FALSE`, [societyId, req.user.id]),
+            db.query(`SELECT COUNT(*) AS total FROM notices WHERE society_id = ? AND (notice_type IN ('Urgent', 'Emergency') OR is_pinned = TRUE)`, [societyId]),
+            db.query(`SELECT COUNT(*) AS total FROM communication_polls WHERE society_id = ? AND status IN ('Draft', 'Live')`, [societyId]),
+            db.query(`SELECT COUNT(*) AS total FROM community_events WHERE society_id = ? AND status IN ('Draft', 'Scheduled', 'Live')`, [societyId]),
+            db.query(`SELECT COUNT(*) AS total FROM shared_documents WHERE society_id = ?`, [societyId]),
             db.query(`
                 SELECT 'Notice' AS item_type, id, title, created_at, notice_type AS priority_label
-                FROM Notices
+                FROM notices
                 WHERE society_id = ?
                 UNION ALL
                 SELECT 'Document' AS item_type, id, title, created_at, category AS priority_label
-                FROM Shared_Documents
+                FROM shared_documents
                 WHERE society_id = ?
                 ORDER BY created_at DESC
                 LIMIT 8
@@ -323,10 +323,10 @@ exports.getMessages = async (req, res) => {
                 SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(m.subject, '') ORDER BY m.created_at DESC SEPARATOR '|||'), '|||', 1) AS last_subject,
                 SUBSTRING_INDEX(GROUP_CONCAT(m.priority ORDER BY m.created_at DESC SEPARATOR '|||'), '|||', 1) AS last_priority,
                 SUM(CASE WHEN m.receiver_id = ? AND m.is_read = FALSE THEN 1 ELSE 0 END) AS unread_count
-            FROM Messages m
-            JOIN Users other_user ON other_user.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
-            LEFT JOIN User_Flats uf ON uf.user_id = other_user.id
-            LEFT JOIN Flats f ON f.id = uf.flat_id
+            FROM messages m
+            JOIN users other_user ON other_user.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
+            LEFT JOIN user_flats uf ON uf.user_id = other_user.id
+            LEFT JOIN flats f ON f.id = uf.flat_id
             WHERE m.society_id = ?
               AND m.message_type = 'Direct'
               AND (m.sender_id = ? OR m.receiver_id = ?)
@@ -354,9 +354,9 @@ exports.getThreadMessages = async (req, res) => {
                 m.*,
                 sender.name AS sender_name,
                 receiver.name AS receiver_name
-            FROM Messages m
-            LEFT JOIN Users sender ON sender.id = m.sender_id
-            LEFT JOIN Users receiver ON receiver.id = m.receiver_id
+            FROM messages m
+            LEFT JOIN users sender ON sender.id = m.sender_id
+            LEFT JOIN users receiver ON receiver.id = m.receiver_id
             WHERE m.society_id = ?
               AND m.message_type = 'Direct'
               AND (
@@ -368,7 +368,7 @@ exports.getThreadMessages = async (req, res) => {
         `, [req.user.society_id, req.user.id, residentId, residentId, req.user.id]);
 
         await db.query(
-            `UPDATE Messages
+            `UPDATE messages
              SET is_read = TRUE, read_at = NOW()
              WHERE society_id = ? AND sender_id = ? AND receiver_id = ? AND is_read = FALSE`,
             [req.user.society_id, residentId, req.user.id]
@@ -394,7 +394,7 @@ exports.sendMessage = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Messages (
+            `INSERT INTO messages (
                 society_id, sender_id, receiver_id, subject, content, priority, message_type, attachments_json, delivered_at
             ) VALUES (?, ?, ?, ?, ?, ?, 'Direct', ?, NOW())`,
             [req.user.society_id, req.user.id, receiverId, subject, content, priority, JSON.stringify(attachments)]
@@ -431,7 +431,7 @@ exports.sendBroadcast = async (req, res) => {
         });
 
         const [result] = await db.query(
-            `INSERT INTO Notices (
+            `INSERT INTO notices (
                 society_id, title, content, created_by, notice_type, audience_type, audience_filters,
                 attachments_json, publish_at, published_at, is_pinned, requires_read_receipt, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -471,9 +471,9 @@ exports.getNotices = async (req, res) => {
                 n.*,
                 creator.name AS created_by_name,
                 COUNT(nr.user_id) AS read_count
-            FROM Notices n
-            LEFT JOIN Users creator ON creator.id = n.created_by
-            LEFT JOIN Notice_Reads nr ON nr.notice_id = n.id
+            FROM notices n
+            LEFT JOIN users creator ON creator.id = n.created_by
+            LEFT JOIN notice_reads nr ON nr.notice_id = n.id
             WHERE n.society_id = ?
             GROUP BY n.id, creator.name
             ORDER BY n.is_pinned DESC, COALESCE(n.publish_at, n.created_at) DESC
@@ -515,7 +515,7 @@ exports.sendEmergencyAlert = async (req, res) => {
             ]);
 
             await db.query(
-                `INSERT INTO Messages (
+                `INSERT INTO messages (
                     society_id, sender_id, receiver_id, subject, content, priority, message_type, attachments_json
                 ) VALUES ?`,
                 [values]
@@ -523,7 +523,7 @@ exports.sendEmergencyAlert = async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO Notices (
+            `INSERT INTO notices (
                 society_id, title, content, created_by, notice_type, audience_type, audience_filters,
                 attachments_json, publish_at, published_at, is_pinned, requires_read_receipt, status
             ) VALUES (?, 'Emergency Alert', ?, ?, 'Emergency', ?, ?, '[]', NOW(), NOW(), TRUE, TRUE, 'Published')`,
@@ -544,9 +544,9 @@ exports.sendEmergencyAlert = async (req, res) => {
 exports.getPolls = async (req, res) => {
     try {
         const [polls, options, responses] = await Promise.all([
-            db.query(`SELECT * FROM Communication_Polls WHERE society_id = ? ORDER BY created_at DESC`, [req.user.society_id]),
-            db.query(`SELECT poll_id, id, option_text FROM Communication_Poll_Options WHERE poll_id IN (SELECT id FROM Communication_Polls WHERE society_id = ?) ORDER BY id`, [req.user.society_id]),
-            db.query(`SELECT poll_id, COUNT(*) AS total FROM Communication_Poll_Responses WHERE poll_id IN (SELECT id FROM Communication_Polls WHERE society_id = ?) GROUP BY poll_id`, [req.user.society_id]),
+            db.query(`SELECT * FROM communication_polls WHERE society_id = ? ORDER BY created_at DESC`, [req.user.society_id]),
+            db.query(`SELECT poll_id, id, option_text FROM communication_poll_options WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?) ORDER BY id`, [req.user.society_id]),
+            db.query(`SELECT poll_id, COUNT(*) AS total FROM communication_poll_responses WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?) GROUP BY poll_id`, [req.user.society_id]),
         ]);
 
         const optionsByPollId = new Map();
@@ -586,7 +586,7 @@ exports.createPoll = async (req, res) => {
         }
 
         const [result] = await db.query(
-            `INSERT INTO Communication_Polls (
+            `INSERT INTO communication_polls (
                 society_id, title, description, poll_type, target_scope, target_filters, starts_at, ends_at, status, created_by
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Live', ?)`,
             [req.user.society_id, title, description, pollType, targetScope, JSON.stringify(targetFilters), startsAt, endsAt, req.user.id]
@@ -595,7 +595,7 @@ exports.createPoll = async (req, res) => {
         if (options.length > 0) {
             const values = options.map((optionText) => [result.insertId, optionText]);
             await db.query(
-                `INSERT INTO Communication_Poll_Options (poll_id, option_text) VALUES ?`,
+                `INSERT INTO communication_poll_options (poll_id, option_text) VALUES ?`,
                 [values]
             );
         }
@@ -610,11 +610,11 @@ exports.createPoll = async (req, res) => {
 exports.getEvents = async (req, res) => {
     try {
         const [events, rsvps] = await Promise.all([
-            db.query(`SELECT * FROM Community_Events WHERE society_id = ? ORDER BY start_at DESC, created_at DESC`, [req.user.society_id]),
+            db.query(`SELECT * FROM community_events WHERE society_id = ? ORDER BY start_at DESC, created_at DESC`, [req.user.society_id]),
             db.query(`
                 SELECT event_id, status, COUNT(*) AS total
-                FROM Event_RSVPs
-                WHERE event_id IN (SELECT id FROM Community_Events WHERE society_id = ?)
+                FROM event_rsvps
+                WHERE event_id IN (SELECT id FROM community_events WHERE society_id = ?)
                 GROUP BY event_id, status
             `, [req.user.society_id]),
         ]);
@@ -649,7 +649,7 @@ exports.createEvent = async (req, res) => {
         }
 
         const [result] = await db.query(
-            `INSERT INTO Community_Events (
+            `INSERT INTO community_events (
                 society_id, title, description, venue, target_scope, target_filters, start_at, end_at, rsvp_required, status, created_by
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Scheduled', ?)`,
             [req.user.society_id, title, description, venue, targetScope, JSON.stringify(targetFilters), startAt, endAt, rsvpRequired, req.user.id]
@@ -666,8 +666,8 @@ exports.getDocuments = async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT d.*, creator.name AS created_by_name
-            FROM Shared_Documents d
-            LEFT JOIN Users creator ON creator.id = d.created_by
+            FROM shared_documents d
+            LEFT JOIN users creator ON creator.id = d.created_by
             WHERE d.society_id = ?
             ORDER BY d.is_pinned DESC, d.created_at DESC
         `, [req.user.society_id]);
@@ -694,7 +694,7 @@ exports.createDocument = async (req, res) => {
         }
 
         const [result] = await db.query(
-            `INSERT INTO Shared_Documents (
+            `INSERT INTO shared_documents (
                 society_id, title, description, category, file_url, target_scope, target_filters, is_pinned, created_by
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [req.user.society_id, title, description, category, fileUrl, targetScope, JSON.stringify(targetFilters), isPinned, req.user.id]
@@ -711,7 +711,7 @@ exports.markAsRead = async (req, res) => {
     try {
         const { id } = req.params;
         await db.query(
-            `UPDATE Messages SET is_read = TRUE, read_at = NOW() WHERE id = ? AND receiver_id = ?`,
+            `UPDATE messages SET is_read = TRUE, read_at = NOW() WHERE id = ? AND receiver_id = ?`,
             [id, req.user.id]
         );
         return res.status(200).json({ success: true, message: 'Message marked as read' });

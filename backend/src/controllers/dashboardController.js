@@ -38,8 +38,8 @@ exports.getDashboardSummary = async (req, res) => {
                     COUNT(DISTINCT CASE WHEN u.role = 'RESIDENT' THEN u.id END) AS residents_total,
                     COUNT(DISTINCT CASE WHEN u.role = 'RESIDENT' THEN uf.flat_id END) AS occupied_flats,
                     COUNT(DISTINCT CASE WHEN u.role = 'RESIDENT' AND COALESCE(u.kyc_status, 'Pending') = 'Pending' THEN u.id END) AS pending_kyc
-                 FROM Users u
-                 LEFT JOIN User_Flats uf ON uf.user_id = u.id
+                 FROM users u
+                 LEFT JOIN user_flats uf ON uf.user_id = u.id
                  WHERE u.society_id = ?`,
                 [societyId]
             ),
@@ -47,7 +47,7 @@ exports.getDashboardSummary = async (req, res) => {
                 `SELECT
                     COUNT(*) AS unpaid_invoices,
                     COALESCE(SUM(COALESCE(balance_amount, amount)), 0) AS pending_dues_amount
-                 FROM Invoices
+                 FROM invoices
                  WHERE society_id = ? AND status IN ('Unpaid', 'Overdue', 'PartiallyPaid')`,
                 [societyId]
             ),
@@ -58,8 +58,8 @@ exports.getDashboardSummary = async (req, res) => {
                     COUNT(CASE WHEN vl.status = 'Pending' THEN 1 END) AS pending_approvals,
                     COUNT(CASE WHEN vl.purpose = 'Delivery' AND DATE(COALESCE(vl.entry_time, vl.approval_requested_at, vl.expected_time)) = CURDATE() THEN 1 END) AS deliveries_today,
                     COUNT(CASE WHEN v.is_watchlisted = 1 AND DATE(COALESCE(vl.entry_time, vl.approval_requested_at, vl.expected_time)) = CURDATE() THEN 1 END) AS watchlist_alerts_today
-                 FROM Visitor_Logs vl
-                 INNER JOIN Visitors v ON v.id = vl.visitor_id
+                 FROM visitor_logs vl
+                 INNER JOIN visitors v ON v.id = vl.visitor_id
                  WHERE v.society_id = ?`,
                 [societyId]
             ),
@@ -70,7 +70,7 @@ exports.getDashboardSummary = async (req, res) => {
                     COUNT(CASE WHEN status NOT IN ('Resolved', 'Closed') AND priority = 'High' THEN 1 END) AS high_priority_open,
                     COUNT(CASE WHEN (resolved_at IS NOT NULL AND resolved_at >= DATE_SUB(NOW(), INTERVAL 7 DAY))
                                     OR (closed_at IS NOT NULL AND closed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) THEN 1 END) AS resolved_this_week
-                 FROM Complaints
+                 FROM complaints
                  WHERE society_id = ?`,
                 [societyId]
             ),
@@ -78,23 +78,23 @@ exports.getDashboardSummary = async (req, res) => {
                 `SELECT
                     (
                         SELECT COUNT(*)
-                        FROM Guard_Shifts
+                        FROM guard_shifts
                         WHERE society_id = ? AND status = 'OnDuty'
                     ) AS guards_on_duty,
                     (
                         SELECT COUNT(*)
-                        FROM Security_Incidents
+                        FROM security_incidents
                         WHERE society_id = ? AND status IN ('Open', 'InReview')
                     ) AS open_incidents,
                     (
                         SELECT COUNT(*)
-                        FROM Security_Incidents
+                        FROM security_incidents
                         WHERE society_id = ? AND status IN ('Open', 'InReview') AND severity = 'Critical'
                     ) AS critical_incidents,
                     (
                         SELECT COUNT(*)
-                        FROM Guard_Activity ga
-                        INNER JOIN Users u ON u.id = ga.guard_id
+                        FROM guard_activity ga
+                        INNER JOIN users u ON u.id = ga.guard_id
                         WHERE u.society_id = ? AND ga.action_type = 'Patrol' AND DATE(ga.timestamp) = CURDATE()
                     ) AS patrols_today`,
                 [societyId, societyId, societyId, societyId]
@@ -105,8 +105,8 @@ exports.getDashboardSummary = async (req, res) => {
                     COUNT(DISTINCT CASE WHEN active_logs.id IS NOT NULL THEN s.id END) AS inside_now,
                     COUNT(DISTINCT CASE WHEN s.is_blacklisted = 1 THEN s.id END) AS blacklisted,
                     COUNT(DISTINCT CASE WHEN s.linked_user_id IS NOT NULL THEN s.id END) AS guard_enabled
-                 FROM Staff s
-                 LEFT JOIN Staff_Logs active_logs
+                 FROM staff s
+                 LEFT JOIN staff_logs active_logs
                     ON active_logs.staff_id = s.id
                    AND active_logs.exit_time IS NULL
                  WHERE s.society_id = ?`,
@@ -118,9 +118,9 @@ exports.getDashboardSummary = async (req, res) => {
                     COUNT(DISTINCT CASE WHEN fb.status = 'Confirmed' AND fb.start_time >= NOW() THEN fb.id END) AS upcoming_bookings,
                     COUNT(DISTINCT CASE WHEN fb.status = 'Confirmed' AND fb.start_time <= NOW() AND fb.end_time > NOW() THEN fb.id END) AS active_now,
                     COUNT(DISTINCT CASE WHEN mb.end_time >= NOW() THEN mb.id END) AS scheduled_maintenance
-                 FROM Facilities f
-                 LEFT JOIN Facility_Bookings fb ON fb.facility_id = f.id
-                 LEFT JOIN Facility_Maintenance_Blocks mb ON mb.facility_id = f.id
+                 FROM facilities f
+                 LEFT JOIN facility_bookings fb ON fb.facility_id = f.id
+                 LEFT JOIN facility_maintenance_blocks mb ON mb.facility_id = f.id
                  WHERE f.society_id = ?`,
                 [societyId]
             ),
@@ -130,15 +130,15 @@ exports.getDashboardSummary = async (req, res) => {
                     COUNT(CASE WHEN status IN ('Draft', 'Live') THEN 1 END) AS active_polls,
                     (
                         SELECT COUNT(*)
-                        FROM Messages
+                        FROM messages
                         WHERE society_id = ? AND receiver_id = ? AND is_read = FALSE
                     ) AS unread_messages,
                     (
                         SELECT COUNT(*)
-                        FROM Community_Events
+                        FROM community_events
                         WHERE society_id = ? AND status IN ('Draft', 'Scheduled', 'Live')
                     ) AS scheduled_events
-                 FROM Notices
+                 FROM notices
                  WHERE society_id = ?`,
                 [societyId, req.user.id, societyId, societyId]
             ),
@@ -155,9 +155,9 @@ exports.getDashboardSummary = async (req, res) => {
                     v.is_watchlisted,
                     v.watchlist_reason,
                     COALESCE(vl.entry_time, vl.approval_requested_at, vl.expected_time) AS timeline_at
-                 FROM Visitor_Logs vl
-                 INNER JOIN Visitors v ON v.id = vl.visitor_id
-                 INNER JOIN Flats f ON f.id = vl.flat_id
+                 FROM visitor_logs vl
+                 INNER JOIN visitors v ON v.id = vl.visitor_id
+                 INNER JOIN flats f ON f.id = vl.flat_id
                  WHERE v.society_id = ?
                  ORDER BY COALESCE(vl.entry_time, vl.approval_requested_at, vl.expected_time, vl.id) DESC, vl.id DESC
                  LIMIT 6`,
@@ -178,10 +178,10 @@ exports.getDashboardSummary = async (req, res) => {
                         WHEN c.sla_deadline IS NOT NULL AND c.status NOT IN ('Resolved', 'Closed') AND c.sla_deadline < NOW() THEN TRUE
                         ELSE FALSE
                     END AS is_overdue
-                 FROM Complaints c
-                 LEFT JOIN Complaint_Categories cc ON cc.id = c.category_id
-                 LEFT JOIN Users u ON u.id = c.created_by_user_id
-                 LEFT JOIN Flats f ON f.id = c.flat_id
+                 FROM complaints c
+                 LEFT JOIN complaint_categories cc ON cc.id = c.category_id
+                 LEFT JOIN users u ON u.id = c.created_by_user_id
+                 LEFT JOIN flats f ON f.id = c.flat_id
                  WHERE c.society_id = ? AND c.status NOT IN ('Resolved', 'Closed')
                  ORDER BY
                     CASE
@@ -202,7 +202,7 @@ exports.getDashboardSummary = async (req, res) => {
                     status,
                     location,
                     occurred_at
-                 FROM Security_Incidents
+                 FROM security_incidents
                  WHERE society_id = ? AND status IN ('Open', 'InReview')
                  ORDER BY
                     CASE severity
@@ -224,9 +224,9 @@ exports.getDashboardSummary = async (req, res) => {
                     fb.end_time,
                     fb.status,
                     fb.payment_status
-                 FROM Facility_Bookings fb
-                 INNER JOIN Facilities f ON f.id = fb.facility_id
-                 INNER JOIN Users u ON u.id = fb.user_id
+                 FROM facility_bookings fb
+                 INNER JOIN facilities f ON f.id = fb.facility_id
+                 INNER JOIN users u ON u.id = fb.user_id
                  WHERE fb.society_id = ? AND fb.status = 'Confirmed' AND fb.start_time >= NOW()
                  ORDER BY fb.start_time ASC
                  LIMIT 5`,

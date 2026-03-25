@@ -1,7 +1,7 @@
 const db = require('./db');
 
 const statements = [
-    `CREATE TABLE IF NOT EXISTS Committees (
+    `CREATE TABLE IF NOT EXISTS committees (
         id INT AUTO_INCREMENT PRIMARY KEY,
         society_id INT NOT NULL,
         committee_type VARCHAR(100) NOT NULL,
@@ -13,10 +13,10 @@ const statements = [
         status ENUM('Draft', 'Active', 'Inactive', 'Archived') DEFAULT 'Active',
         created_by INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (society_id) REFERENCES Societies(id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Members (
+    `CREATE TABLE IF NOT EXISTS committee_members (
         id INT AUTO_INCREMENT PRIMARY KEY,
         committee_id INT NOT NULL,
         user_id INT NOT NULL,
@@ -29,10 +29,10 @@ const statements = [
         status ENUM('Active', 'Inactive') DEFAULT 'Active',
         joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_committee_member (committee_id, user_id),
-        FOREIGN KEY (committee_id) REFERENCES Committees(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Messages (
+    `CREATE TABLE IF NOT EXISTS committee_messages (
         id INT AUTO_INCREMENT PRIMARY KEY,
         committee_id INT NOT NULL,
         sender_id INT NOT NULL,
@@ -40,10 +40,10 @@ const statements = [
         attachments_json JSON NULL,
         is_decision_log BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (committee_id) REFERENCES Committees(id) ON DELETE CASCADE,
-        FOREIGN KEY (sender_id) REFERENCES Users(id) ON DELETE CASCADE
+        FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE,
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Tasks (
+    `CREATE TABLE IF NOT EXISTS committee_tasks (
         id INT AUTO_INCREMENT PRIMARY KEY,
         committee_id INT NOT NULL,
         title VARCHAR(255) NOT NULL,
@@ -54,11 +54,11 @@ const statements = [
         priority ENUM('Low', 'Medium', 'High') DEFAULT 'Medium',
         created_by INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (committee_id) REFERENCES Committees(id) ON DELETE CASCADE,
-        FOREIGN KEY (assigned_member_id) REFERENCES Committee_Members(id) ON DELETE SET NULL,
-        FOREIGN KEY (created_by) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_member_id) REFERENCES committee_members(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Documents (
+    `CREATE TABLE IF NOT EXISTS committee_documents (
         id INT AUTO_INCREMENT PRIMARY KEY,
         committee_id INT NOT NULL,
         title VARCHAR(255) NOT NULL,
@@ -66,10 +66,10 @@ const statements = [
         file_url VARCHAR(255) NOT NULL,
         uploaded_by INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (committee_id) REFERENCES Committees(id) ON DELETE CASCADE,
-        FOREIGN KEY (uploaded_by) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE,
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Votes (
+    `CREATE TABLE IF NOT EXISTS committee_votes (
         id INT AUTO_INCREMENT PRIMARY KEY,
         committee_id INT NOT NULL,
         title VARCHAR(255) NOT NULL,
@@ -79,24 +79,24 @@ const statements = [
         closes_at DATETIME NULL,
         created_by INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (committee_id) REFERENCES Committees(id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES Users(id) ON DELETE SET NULL
+        FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Vote_Options (
+    `CREATE TABLE IF NOT EXISTS committee_vote_options (
         id INT AUTO_INCREMENT PRIMARY KEY,
         vote_id INT NOT NULL,
         option_text VARCHAR(255) NOT NULL,
-        FOREIGN KEY (vote_id) REFERENCES Committee_Votes(id) ON DELETE CASCADE
+        FOREIGN KEY (vote_id) REFERENCES committee_votes(id) ON DELETE CASCADE
     )`,
-    `CREATE TABLE IF NOT EXISTS Committee_Vote_Responses (
+    `CREATE TABLE IF NOT EXISTS committee_vote_responses (
         vote_id INT NOT NULL,
         user_id INT NOT NULL,
         option_id INT NOT NULL,
         responded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (vote_id, user_id),
-        FOREIGN KEY (vote_id) REFERENCES Committee_Votes(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE,
-        FOREIGN KEY (option_id) REFERENCES Committee_Vote_Options(id) ON DELETE CASCADE
+        FOREIGN KEY (vote_id) REFERENCES committee_votes(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (option_id) REFERENCES committee_vote_options(id) ON DELETE CASCADE
     )`,
 ];
 

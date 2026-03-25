@@ -29,7 +29,7 @@ const sendWithTwilio = async ({ to, body }) => {
         };
     }
 
-    const response = await fetch(`${TWILIO_API_BASE}/Accounts/${accountSid}/Messages.json`, {
+    const response = await fetch(`${TWILIO_API_BASE}/Accounts/${accountSid}/messages.json`, {
         method: 'POST',
         headers: {
             Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
