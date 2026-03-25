@@ -884,6 +884,9 @@ exports.deleteInvoice = async (req, res) => {
         if (!invoice) {
             return res.status(404).json({ success: false, message: 'Invoice not found' });
         }
+        if (invoice.status !== 'Unpaid') {
+            return res.status(400).json({ success: false, message: 'Only unpaid invoices can be deleted' });
+        }
 
         await db.query(`DELETE FROM invoices WHERE id = ? AND society_id = ?`, [invoiceId, req.user.society_id]);
 
@@ -894,6 +897,55 @@ exports.deleteInvoice = async (req, res) => {
     } catch (error) {
         console.error('deleteInvoice error:', error);
         return res.status(500).json({ success: false, message: 'Server error deleting invoice' });
+    }
+};
+
+exports.deleteInvoicesBulk = async (req, res) => {
+    try {
+        const invoiceIds = Array.isArray(req.body.invoice_ids)
+            ? [...new Set(req.body.invoice_ids.map((id) => Number(id)).filter(Boolean))]
+            : [];
+
+        if (!invoiceIds.length) {
+            return res.status(400).json({ success: false, message: 'At least one invoice must be selected' });
+        }
+
+        const placeholders = invoiceIds.map(() => '?').join(', ');
+        const [rows] = await db.query(
+            `SELECT id, invoice_number
+             FROM invoices
+             WHERE society_id = ? AND id IN (${placeholders})`,
+            [req.user.society_id, ...invoiceIds]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({ success: false, message: 'No matching invoices found' });
+        }
+        const nonUnpaid = rows.filter((row) => row.status !== 'Unpaid');
+        if (nonUnpaid.length) {
+            return res.status(400).json({
+                success: false,
+                message: 'Only unpaid invoices can be bulk deleted',
+                blocked_invoices: nonUnpaid.map((row) => row.invoice_number || `INV-${row.id}`),
+            });
+        }
+
+        const matchedIds = rows.map((row) => row.id);
+        const matchedPlaceholders = matchedIds.map(() => '?').join(', ');
+        await db.query(
+            `DELETE FROM invoices WHERE society_id = ? AND id IN (${matchedPlaceholders})`,
+            [req.user.society_id, ...matchedIds]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `${matchedIds.length} invoice(s) deleted successfully`,
+            deleted_count: matchedIds.length,
+            deleted_invoices: rows.map((row) => row.invoice_number || `INV-${row.id}`),
+        });
+    } catch (error) {
+        console.error('deleteInvoicesBulk error:', error);
+        return res.status(500).json({ success: false, message: 'Server error deleting selected invoices' });
     }
 };
 

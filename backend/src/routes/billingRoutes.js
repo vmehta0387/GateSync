@@ -10,6 +10,7 @@ router.get('/invoices', billingController.getInvoices);
 router.get('/summary', billingController.getBillingSummary);
 router.get('/reports', authorize('ADMIN', 'SUPERADMIN'), billingController.getBillingReports);
 router.get('/configs', authorize('ADMIN', 'SUPERADMIN'), billingController.getBillingConfigs);
+router.post('/bulk-delete', authorize('ADMIN', 'SUPERADMIN'), billingController.deleteInvoicesBulk);
 
 router.post('/:id/pay', authorize('RESIDENT', 'ADMIN', 'SUPERADMIN'), billingController.payInvoice);
 router.put('/:id/adjust', authorize('ADMIN', 'SUPERADMIN'), billingController.adjustInvoice);

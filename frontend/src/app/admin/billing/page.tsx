@@ -82,6 +82,7 @@ type CollectionSnapshotRow = {
 type BillingTab = 'overview' | 'rules' | 'invoices' | 'reports';
 type InvoiceFilter = 'All' | 'Unpaid' | 'Overdue' | 'Paid' | 'PartiallyPaid';
 type InvoiceAction = 'paid' | 'waive' | 'delete';
+type BulkAction = 'delete';
 
 const API_BASE = 'https://api.gatesync.in/api/v1';
 
@@ -203,6 +204,8 @@ export default function BillingPage() {
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: InvoiceAction; invoice: Invoice } | null>(null);
+  const [bulkConfirmAction, setBulkConfirmAction] = useState<{ type: BulkAction; invoiceIds: number[] } | null>(null);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
   const [flatTypes, setFlatTypes] = useState<string[]>(['Studio', '1BHK', '2BHK', '3BHK', '4BHK', 'Villa', 'Other']);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('gatepulse_token') : null;
@@ -327,6 +330,15 @@ export default function BillingPage() {
     await loadAll();
   };
 
+  const deleteInvoicesBulk = async (invoiceIds: number[]) => {
+    await fetch(`${API_BASE}/billing/bulk-delete`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ invoice_ids: invoiceIds }),
+    });
+    await loadAll();
+  };
+
   const handleInvoiceAction = async () => {
     if (!confirmAction) return;
     if (confirmAction.type === 'paid') {
@@ -341,6 +353,17 @@ export default function BillingPage() {
     }
     setConfirmAction(null);
     setSelectedInvoice(null);
+  };
+
+  const handleBulkInvoiceAction = async () => {
+    if (!bulkConfirmAction) return;
+    await deleteInvoicesBulk(bulkConfirmAction.invoiceIds);
+    setMessage(`${bulkConfirmAction.invoiceIds.length} invoice(s) deleted successfully.`);
+    setBulkConfirmAction(null);
+    setSelectedInvoiceIds([]);
+    if (selectedInvoice && bulkConfirmAction.invoiceIds.includes(selectedInvoice.id)) {
+      setSelectedInvoice(null);
+    }
   };
 
   const filteredInvoices = useMemo(() => {
@@ -361,6 +384,34 @@ export default function BillingPage() {
       return matchesFilter && matchesQuery;
     });
   }, [invoiceFilter, invoiceSearch, invoices]);
+
+  const selectedUnpaidInvoiceIds = useMemo(
+    () => selectedInvoiceIds.filter((id) => invoices.some((invoice) => invoice.id === id && invoice.status === 'Unpaid')),
+    [invoices, selectedInvoiceIds],
+  );
+
+  useEffect(() => {
+    setSelectedInvoiceIds((current) => current.filter((id) => invoices.some((invoice) => invoice.id === id)));
+  }, [invoices]);
+
+  const allFilteredSelected = filteredInvoices.length > 0 && filteredInvoices.every((invoice) => selectedInvoiceIds.includes(invoice.id));
+  const selectedFilteredCount = filteredInvoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id)).length;
+
+  const toggleInvoiceSelection = (invoiceId: number, checked: boolean) => {
+    setSelectedInvoiceIds((current) => (
+      checked ? [...new Set([...current, invoiceId])] : current.filter((id) => id !== invoiceId)
+    ));
+  };
+
+  const toggleSelectAllFiltered = (checked: boolean) => {
+    setSelectedInvoiceIds((current) => {
+      const filteredIds = filteredInvoices.map((invoice) => invoice.id);
+      if (checked) {
+        return [...new Set([...current, ...filteredIds])];
+      }
+      return current.filter((id) => !filteredIds.includes(id));
+    });
+  };
 
   const activeConfig = configs.find((config) => config.id === selectedConfigId) || null;
   const dueInvoicesCount = invoices.filter((invoice) => ['Unpaid', 'Overdue', 'PartiallyPaid'].includes(invoice.status)).length;
@@ -717,6 +768,32 @@ export default function BillingPage() {
                 Export Invoices
               </button>
             </div>
+            {selectedInvoiceIds.length ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm">
+                <p className="font-medium text-rose-800">
+                  {selectedInvoiceIds.length} invoice(s) selected
+                  {selectedFilteredCount && selectedFilteredCount !== selectedInvoiceIds.length ? ` · ${selectedFilteredCount} in current filter` : ''}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedInvoiceIds([])}
+                    className="rounded-xl border border-rose-200 bg-white px-3 py-2 font-semibold text-rose-700 hover:bg-rose-100"
+                  >
+                    Clear Selection
+                  </button>
+                  <button
+                    onClick={() => setBulkConfirmAction({ type: 'delete', invoiceIds: selectedUnpaidInvoiceIds })}
+                    disabled={!selectedUnpaidInvoiceIds.length || selectedUnpaidInvoiceIds.length !== selectedInvoiceIds.length}
+                    className="rounded-xl bg-rose-600 px-3 py-2 font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Delete Selected
+                  </button>
+                </div>
+                {selectedUnpaidInvoiceIds.length !== selectedInvoiceIds.length ? (
+                  <p className="w-full text-xs text-rose-700">Only invoices with status `Unpaid` can be deleted. Clear paid, overdue, or adjusted selections first.</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -731,6 +808,14 @@ export default function BillingPage() {
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-slate-200 text-slate-500">
                   <tr>
+                    <th className="py-3 pr-4">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
+                        aria-label="Select all filtered invoices"
+                      />
+                    </th>
                     <th className="py-3 pr-4">Invoice</th>
                     <th className="py-3 pr-4">Flat</th>
                     <th className="py-3 pr-4">Breakdown</th>
@@ -743,9 +828,17 @@ export default function BillingPage() {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={8} className="py-10 text-center text-slate-500">Loading billing data...</td></tr>
+                    <tr><td colSpan={9} className="py-10 text-center text-slate-500">Loading billing data...</td></tr>
                   ) : filteredInvoices.length ? filteredInvoices.map((invoice) => (
                     <tr key={invoice.id} className="border-b border-slate-100 align-top">
+                      <td className="py-4 pr-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoiceIds.includes(invoice.id)}
+                          onChange={(e) => toggleInvoiceSelection(invoice.id, e.target.checked)}
+                          aria-label={`Select ${invoice.invoice_number || `INV-${invoice.id}`}`}
+                        />
+                      </td>
                       <td className="py-4 pr-4">
                         <p className="font-semibold text-slate-900">{invoice.invoice_number || `INV-${invoice.id}`}</p>
                         <p className="mt-1 text-xs text-slate-500">{invoice.billing_type}</p>
@@ -781,18 +874,22 @@ export default function BillingPage() {
                             <button onClick={() => setSelectedInvoice(invoice)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</button>
                             <button onClick={() => setConfirmAction({ type: 'paid', invoice })} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Mark Paid</button>
                             <button onClick={() => setConfirmAction({ type: 'waive', invoice })} className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-200">Waive</button>
-                            <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
+                            {invoice.status === 'Unpaid' ? (
+                              <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
+                            ) : null}
                           </div>
                         ) : (
                           <div className="flex justify-end gap-2">
                             <button onClick={() => setSelectedInvoice(invoice)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</button>
-                            <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
+                            {invoice.status === 'Unpaid' ? (
+                              <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
+                            ) : null}
                           </div>
                         )}
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={8} className="py-12 text-center text-slate-500">
+                    <tr><td colSpan={9} className="py-12 text-center text-slate-500">
                       <div className="mx-auto max-w-sm space-y-2">
                         <p className="text-base font-semibold text-slate-700">No invoices match the current view</p>
                         <p>Try clearing the search, changing the status filter, or generating bills for the selected month.</p>
@@ -951,9 +1048,11 @@ export default function BillingPage() {
                   </button>
                 </>
               ) : null}
-              <button onClick={() => setConfirmAction({ type: 'delete', invoice: selectedInvoice })} className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 hover:bg-rose-100">
-                Delete Invoice
-              </button>
+              {selectedInvoice.status === 'Unpaid' ? (
+                <button onClick={() => setConfirmAction({ type: 'delete', invoice: selectedInvoice })} className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 hover:bg-rose-100">
+                  Delete Invoice
+                </button>
+              ) : null}
               <button
                 onClick={() =>
                   downloadCsv(
@@ -1002,6 +1101,32 @@ export default function BillingPage() {
               </button>
               <button onClick={() => void handleInvoiceAction()} className={`flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white ${confirmAction.type === 'paid' ? 'bg-emerald-600 hover:bg-emerald-700' : confirmAction.type === 'waive' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-600 hover:bg-rose-700'}`}>
                 {confirmAction.type === 'paid' ? 'Confirm Paid' : confirmAction.type === 'waive' ? 'Confirm Waive' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {bulkConfirmAction ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Confirm Bulk Action</p>
+            <h3 className="mt-2 text-xl font-black text-slate-900">Delete selected invoices?</h3>
+            <p className="mt-3 text-sm text-slate-600">
+              {bulkConfirmAction.invoiceIds.length} invoice(s) will be removed along with their line items, payments, and adjustments.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setBulkConfirmAction(null)}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleBulkInvoiceAction()}
+                className="flex-1 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-bold text-white hover:bg-rose-700"
+              >
+                Confirm Delete
               </button>
             </div>
           </div>
