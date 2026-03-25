@@ -204,6 +204,7 @@ const syncInvoiceFinancials = async (invoiceRows) => {
 const fetchInvoiceRows = async ({ societyId, role, userId, filters = {}, invoiceId = null }) => {
     const whereClauses = ['i.society_id = ?'];
     const params = [societyId];
+    const residentJoin = role === 'RESIDENT' ? 'INNER JOIN user_flats uf ON uf.flat_id = f.id' : '';
 
     if (role === 'RESIDENT') {
         whereClauses.push('uf.user_id = ?');
@@ -239,7 +240,7 @@ const fetchInvoiceRows = async ({ societyId, role, userId, filters = {}, invoice
             COALESCE(adjustments.adjustment_total, 0) AS adjustment_total
          FROM invoices i
          INNER JOIN flats f ON f.id = i.flat_id
-         ${role === 'RESIDENT' ? 'INNER JOIN user_flats uf ON uf.flat_id = f.id' : 'LEFT JOIN user_flats uf ON uf.flat_id = f.id'}
+         ${residentJoin}
          LEFT JOIN billing_configs bc ON bc.id = i.billing_config_id
          LEFT JOIN (
             SELECT invoice_id, SUM(CASE WHEN status = 'Completed' THEN amount ELSE 0 END) AS payment_total
@@ -250,7 +251,6 @@ const fetchInvoiceRows = async ({ societyId, role, userId, filters = {}, invoice
             FROM invoice_adjustments GROUP BY invoice_id
          ) adjustments ON adjustments.invoice_id = i.id
          WHERE ${whereClauses.join(' AND ')}
-         GROUP BY i.id
          ORDER BY i.month_year DESC, i.id DESC`,
         params
     );
@@ -847,6 +847,36 @@ exports.adjustInvoice = async (req, res) => {
     } catch (error) {
         console.error('adjustInvoice error:', error);
         return res.status(500).json({ success: false, message: 'Server error adjusting invoice' });
+    }
+};
+
+exports.deleteInvoice = async (req, res) => {
+    try {
+        const invoiceId = Number(req.params.id);
+        if (!invoiceId) {
+            return res.status(400).json({ success: false, message: 'Invoice id is required' });
+        }
+
+        const rows = await fetchInvoiceRows({
+            societyId: req.user.society_id,
+            role: 'ADMIN',
+            userId: req.user.id,
+            invoiceId,
+        });
+        const invoice = rows[0];
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
+        }
+
+        await db.query(`DELETE FROM invoices WHERE id = ? AND society_id = ?`, [invoiceId, req.user.society_id]);
+
+        return res.status(200).json({
+            success: true,
+            message: `${invoice.invoice_number || `INV-${invoice.id}`} deleted successfully`,
+        });
+    } catch (error) {
+        console.error('deleteInvoice error:', error);
+        return res.status(500).json({ success: false, message: 'Server error deleting invoice' });
     }
 };
 

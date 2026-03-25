@@ -63,6 +63,8 @@ type Invoice = {
   total_amount: number;
   balance_amount: number;
   line_items: Array<{ id: number; label: string; amount: number }>;
+  payments?: Array<{ id: number; amount: number; payment_method: string; payment_reference: string; paid_at: string | null; status: string }>;
+  adjustments?: Array<{ id: number; adjustment_type: string; amount: number; reason: string; created_at: string | null }>;
 };
 
 type Reports = {
@@ -79,7 +81,7 @@ type CollectionSnapshotRow = {
 
 type BillingTab = 'overview' | 'rules' | 'invoices' | 'reports';
 type InvoiceFilter = 'All' | 'Unpaid' | 'Overdue' | 'Paid' | 'PartiallyPaid';
-type InvoiceAction = 'paid' | 'waive';
+type InvoiceAction = 'paid' | 'waive' | 'delete';
 
 const API_BASE = 'https://api.gatesync.in/api/v1';
 
@@ -317,14 +319,25 @@ export default function BillingPage() {
     await loadAll();
   };
 
+  const deleteInvoice = async (invoiceId: number) => {
+    await fetch(`${API_BASE}/billing/${invoiceId}`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
+    await loadAll();
+  };
+
   const handleInvoiceAction = async () => {
     if (!confirmAction) return;
     if (confirmAction.type === 'paid') {
       await markPaid(confirmAction.invoice.id);
       setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} marked as paid.`);
-    } else {
+    } else if (confirmAction.type === 'waive') {
       await applyWaiver(confirmAction.invoice.id);
       setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} waived successfully.`);
+    } else {
+      await deleteInvoice(confirmAction.invoice.id);
+      setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} deleted successfully.`);
     }
     setConfirmAction(null);
     setSelectedInvoice(null);
@@ -768,11 +781,13 @@ export default function BillingPage() {
                             <button onClick={() => setSelectedInvoice(invoice)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</button>
                             <button onClick={() => setConfirmAction({ type: 'paid', invoice })} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Mark Paid</button>
                             <button onClick={() => setConfirmAction({ type: 'waive', invoice })} className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-200">Waive</button>
+                            <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
                           </div>
                         ) : (
-                          <button onClick={() => setSelectedInvoice(invoice)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                            View
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => setSelectedInvoice(invoice)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</button>
+                            <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -893,6 +908,38 @@ export default function BillingPage() {
               </div>
             </div>
 
+            <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+              <h4 className="text-sm font-bold text-slate-900">Payments</h4>
+              <div className="mt-4 space-y-3">
+                {selectedInvoice.payments?.length ? selectedInvoice.payments.map((payment) => (
+                  <div key={payment.id} className="rounded-xl bg-slate-50 px-3 py-3 text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold text-slate-900">{formatCurrency(payment.amount)}</span>
+                      <span className="text-xs font-semibold text-slate-500">{payment.status}</span>
+                    </div>
+                    <p className="mt-1 text-slate-600">{payment.payment_method || 'Payment'} {payment.payment_reference ? `· ${payment.payment_reference}` : ''}</p>
+                    <p className="text-xs text-slate-500">{payment.paid_at || 'Not recorded'}</p>
+                  </div>
+                )) : <p className="text-sm text-slate-500">No payments recorded for this invoice.</p>}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+              <h4 className="text-sm font-bold text-slate-900">Adjustments</h4>
+              <div className="mt-4 space-y-3">
+                {selectedInvoice.adjustments?.length ? selectedInvoice.adjustments.map((adjustment) => (
+                  <div key={adjustment.id} className="rounded-xl bg-slate-50 px-3 py-3 text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold text-slate-900">{adjustment.adjustment_type}</span>
+                      <span className="font-semibold text-violet-700">{formatCurrency(adjustment.amount)}</span>
+                    </div>
+                    <p className="mt-1 text-slate-600">{adjustment.reason || 'No reason provided'}</p>
+                    <p className="text-xs text-slate-500">{adjustment.created_at || 'Not recorded'}</p>
+                  </div>
+                )) : <p className="text-sm text-slate-500">No adjustments recorded for this invoice.</p>}
+              </div>
+            </div>
+
             <div className="mt-6 flex flex-wrap gap-3">
               {['Unpaid', 'Overdue', 'PartiallyPaid'].includes(selectedInvoice.status) ? (
                 <>
@@ -904,6 +951,9 @@ export default function BillingPage() {
                   </button>
                 </>
               ) : null}
+              <button onClick={() => setConfirmAction({ type: 'delete', invoice: selectedInvoice })} className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 hover:bg-rose-100">
+                Delete Invoice
+              </button>
               <button
                 onClick={() =>
                   downloadCsv(
@@ -937,18 +987,21 @@ export default function BillingPage() {
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Confirm Action</p>
             <h3 className="mt-2 text-xl font-black text-slate-900">
-              {confirmAction.type === 'paid' ? 'Mark invoice as paid?' : 'Waive this invoice?'}
+              {confirmAction.type === 'paid' ? 'Mark invoice as paid?' : confirmAction.type === 'waive' ? 'Waive this invoice?' : 'Delete this invoice?'}
             </h3>
             <p className="mt-3 text-sm text-slate-600">
               {confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} for {confirmAction.invoice.block_name}-{confirmAction.invoice.flat_number}
-              {' '}currently has a balance of {formatCurrency(confirmAction.invoice.balance_amount)}.
+              {' '}
+              {confirmAction.type === 'delete'
+                ? `will be removed along with its line items, payments, and adjustments.`
+                : `currently has a balance of ${formatCurrency(confirmAction.invoice.balance_amount)}.`}
             </p>
             <div className="mt-6 flex gap-3">
               <button onClick={() => setConfirmAction(null)} className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
-              <button onClick={() => void handleInvoiceAction()} className={`flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white ${confirmAction.type === 'paid' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
-                {confirmAction.type === 'paid' ? 'Confirm Paid' : 'Confirm Waive'}
+              <button onClick={() => void handleInvoiceAction()} className={`flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white ${confirmAction.type === 'paid' ? 'bg-emerald-600 hover:bg-emerald-700' : confirmAction.type === 'waive' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-600 hover:bg-rose-700'}`}>
+                {confirmAction.type === 'paid' ? 'Confirm Paid' : confirmAction.type === 'waive' ? 'Confirm Waive' : 'Confirm Delete'}
               </button>
             </div>
           </div>

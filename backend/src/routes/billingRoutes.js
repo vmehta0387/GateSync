@@ -13,6 +13,7 @@ router.get('/configs', authorize('ADMIN', 'SUPERADMIN'), billingController.getBi
 
 router.post('/:id/pay', authorize('RESIDENT', 'ADMIN', 'SUPERADMIN'), billingController.payInvoice);
 router.put('/:id/adjust', authorize('ADMIN', 'SUPERADMIN'), billingController.adjustInvoice);
+router.delete('/:id', authorize('ADMIN', 'SUPERADMIN'), billingController.deleteInvoice);
 
 router.post('/generate', authorize('ADMIN', 'SUPERADMIN'), billingController.generateInvoice);
 router.post('/configs', authorize('ADMIN', 'SUPERADMIN'), billingController.saveBillingConfig);
