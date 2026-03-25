@@ -323,46 +323,64 @@ export default function BillingPage() {
   };
 
   const deleteInvoice = async (invoiceId: number) => {
-    await fetch(`${API_BASE}/billing/${invoiceId}`, {
+    const res = await fetch(`${API_BASE}/billing/${invoiceId}`, {
       method: 'DELETE',
       headers: authHeaders,
     });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to delete invoice');
+    }
     await loadAll();
+    return data;
   };
 
   const deleteInvoicesBulk = async (invoiceIds: number[]) => {
-    await fetch(`${API_BASE}/billing/bulk-delete`, {
+    const res = await fetch(`${API_BASE}/billing/bulk-delete`, {
       method: 'POST',
       headers: authHeaders,
       body: JSON.stringify({ invoice_ids: invoiceIds }),
     });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to delete selected invoices');
+    }
     await loadAll();
+    return data;
   };
 
   const handleInvoiceAction = async () => {
     if (!confirmAction) return;
-    if (confirmAction.type === 'paid') {
-      await markPaid(confirmAction.invoice.id);
-      setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} marked as paid.`);
-    } else if (confirmAction.type === 'waive') {
-      await applyWaiver(confirmAction.invoice.id);
-      setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} waived successfully.`);
-    } else {
-      await deleteInvoice(confirmAction.invoice.id);
-      setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} deleted successfully.`);
+    try {
+      if (confirmAction.type === 'paid') {
+        await markPaid(confirmAction.invoice.id);
+        setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} marked as paid.`);
+      } else if (confirmAction.type === 'waive') {
+        await applyWaiver(confirmAction.invoice.id);
+        setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} waived successfully.`);
+      } else {
+        await deleteInvoice(confirmAction.invoice.id);
+        setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} deleted successfully.`);
+      }
+      setConfirmAction(null);
+      setSelectedInvoice(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to complete invoice action');
     }
-    setConfirmAction(null);
-    setSelectedInvoice(null);
   };
 
   const handleBulkInvoiceAction = async () => {
     if (!bulkConfirmAction) return;
-    await deleteInvoicesBulk(bulkConfirmAction.invoiceIds);
-    setMessage(`${bulkConfirmAction.invoiceIds.length} invoice(s) deleted successfully.`);
-    setBulkConfirmAction(null);
-    setSelectedInvoiceIds([]);
-    if (selectedInvoice && bulkConfirmAction.invoiceIds.includes(selectedInvoice.id)) {
-      setSelectedInvoice(null);
+    try {
+      await deleteInvoicesBulk(bulkConfirmAction.invoiceIds);
+      setMessage(`${bulkConfirmAction.invoiceIds.length} invoice(s) deleted successfully.`);
+      setBulkConfirmAction(null);
+      setSelectedInvoiceIds([]);
+      if (selectedInvoice && bulkConfirmAction.invoiceIds.includes(selectedInvoice.id)) {
+        setSelectedInvoice(null);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to delete selected invoices');
     }
   };
 
@@ -389,12 +407,16 @@ export default function BillingPage() {
     () => selectedInvoiceIds.filter((id) => invoices.some((invoice) => invoice.id === id && invoice.status === 'Unpaid')),
     [invoices, selectedInvoiceIds],
   );
+  const unpaidFilteredInvoices = useMemo(
+    () => filteredInvoices.filter((invoice) => invoice.status === 'Unpaid'),
+    [filteredInvoices],
+  );
 
   useEffect(() => {
     setSelectedInvoiceIds((current) => current.filter((id) => invoices.some((invoice) => invoice.id === id)));
   }, [invoices]);
 
-  const allFilteredSelected = filteredInvoices.length > 0 && filteredInvoices.every((invoice) => selectedInvoiceIds.includes(invoice.id));
+  const allFilteredSelected = unpaidFilteredInvoices.length > 0 && unpaidFilteredInvoices.every((invoice) => selectedInvoiceIds.includes(invoice.id));
   const selectedFilteredCount = filteredInvoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id)).length;
 
   const toggleInvoiceSelection = (invoiceId: number, checked: boolean) => {
@@ -405,7 +427,7 @@ export default function BillingPage() {
 
   const toggleSelectAllFiltered = (checked: boolean) => {
     setSelectedInvoiceIds((current) => {
-      const filteredIds = filteredInvoices.map((invoice) => invoice.id);
+      const filteredIds = unpaidFilteredInvoices.map((invoice) => invoice.id);
       if (checked) {
         return [...new Set([...current, ...filteredIds])];
       }
@@ -812,8 +834,9 @@ export default function BillingPage() {
                       <input
                         type="checkbox"
                         checked={allFilteredSelected}
+                        disabled={!unpaidFilteredInvoices.length}
                         onChange={(e) => toggleSelectAllFiltered(e.target.checked)}
-                        aria-label="Select all filtered invoices"
+                        aria-label="Select all unpaid filtered invoices"
                       />
                     </th>
                     <th className="py-3 pr-4">Invoice</th>
@@ -834,6 +857,7 @@ export default function BillingPage() {
                       <td className="py-4 pr-4">
                         <input
                           type="checkbox"
+                          disabled={invoice.status !== 'Unpaid'}
                           checked={selectedInvoiceIds.includes(invoice.id)}
                           onChange={(e) => toggleInvoiceSelection(invoice.id, e.target.checked)}
                           aria-label={`Select ${invoice.invoice_number || `INV-${invoice.id}`}`}

@@ -912,7 +912,7 @@ exports.deleteInvoicesBulk = async (req, res) => {
 
         const placeholders = invoiceIds.map(() => '?').join(', ');
         const [rows] = await db.query(
-            `SELECT id, invoice_number
+            `SELECT id, invoice_number, status
              FROM invoices
              WHERE society_id = ? AND id IN (${placeholders})`,
             [req.user.society_id, ...invoiceIds]
