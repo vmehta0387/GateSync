@@ -2,7 +2,7 @@
 
 import { getStoredSession } from '@/lib/auth';
 
-export const SECURITY_API_BASE = 'http://localhost:5000/api/v1/security';
+export const SECURITY_API_BASE = 'https://api.gatesync.in/api/v1/security';
 
 export type GuardLog = {
   id: number;
@@ -82,20 +82,21 @@ export type SecurityGuard = {
   guard_status: string;
 };
 
-function getHeaders(includeJson = true) {
+function getHeaders(includeJson = true): Record<string, string> {
   const { token } = getStoredSession();
   if (!token) {
     throw new Error('Authentication required');
   }
 
-  return includeJson
-    ? {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      }
-    : {
-        Authorization: `Bearer ${token}`,
-      };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return headers;
 }
 
 export async function fetchSecurityJson<T>(path: string): Promise<T> {

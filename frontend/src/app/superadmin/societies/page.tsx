@@ -13,7 +13,7 @@ export default function SocietiesPage() {
   const fetchSocieties = async () => {
     try {
       const token = localStorage.getItem('gatepulse_token');
-      const res = await fetch('http://localhost:5000/api/v1/superadmin/societies', {
+      const res = await fetch('https://api.gatesync.in/api/v1/superadmin/societies', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -35,7 +35,7 @@ export default function SocietiesPage() {
     setOpenDropdownId(null);
     try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch(`http://localhost:5000/api/v1/superadmin/societies/${id}/status`, {
+        const res = await fetch(`https://api.gatesync.in/api/v1/superadmin/societies/${id}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ status })

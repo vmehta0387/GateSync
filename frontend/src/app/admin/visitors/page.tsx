@@ -66,8 +66,8 @@ export default function VisitorsPage() {
       const token = localStorage.getItem('gatepulse_token');
       const headers = { Authorization: `Bearer ${token}` };
       const [logsRes, rulesRes] = await Promise.all([
-        fetch('http://localhost:5000/api/v1/visitors/logs?limit=200', { headers }),
-        fetch('http://localhost:5000/api/v1/visitors/rules', { headers }),
+        fetch('https://api.gatesync.in/api/v1/visitors/logs?limit=200', { headers }),
+        fetch('https://api.gatesync.in/api/v1/visitors/rules', { headers }),
       ]);
 
       const [logsData, rulesData] = await Promise.all([logsRes.json(), rulesRes.json()]);
@@ -131,7 +131,7 @@ export default function VisitorsPage() {
     setSavingRules(true);
     try {
       const token = localStorage.getItem('gatepulse_token');
-      await fetch('http://localhost:5000/api/v1/visitors/rules', {
+      await fetch('https://api.gatesync.in/api/v1/visitors/rules', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +149,7 @@ export default function VisitorsPage() {
   const updateVisitorFlags = async (log: VisitorLog, updates: Partial<Pick<VisitorLog, 'is_vip' | 'is_blacklisted' | 'is_watchlisted' | 'watchlist_reason'>>) => {
     try {
       const token = localStorage.getItem('gatepulse_token');
-      const response = await fetch('http://localhost:5000/api/v1/visitors/status', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/status', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

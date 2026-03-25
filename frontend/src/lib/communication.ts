@@ -2,7 +2,7 @@
 
 import { getStoredSession } from '@/lib/auth';
 
-export const COMMUNICATION_API_BASE = 'http://localhost:5000/api/v1/communication';
+export const COMMUNICATION_API_BASE = 'https://api.gatesync.in/api/v1/communication';
 
 export type InboxItem = {
   item_type: string;

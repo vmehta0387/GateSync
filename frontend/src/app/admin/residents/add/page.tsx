@@ -40,7 +40,7 @@ export default function AddResidentWizard() {
     try {
       const payload = { basic, flat, identity, emergency, notifications, permissions, vehicles, family };
       const token = localStorage.getItem('gatepulse_token');
-      const res = await fetch('http://localhost:5000/api/v1/residents', {
+      const res = await fetch('https://api.gatesync.in/api/v1/residents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)

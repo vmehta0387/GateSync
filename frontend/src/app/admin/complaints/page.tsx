@@ -49,7 +49,7 @@ export default function AdminComplaintsPage() {
       fetchComplaintsJson<{ success: boolean; summary: ComplaintDashboardSummary }>('/summary'),
       fetchComplaintsJson<{ success: boolean; categories: ComplaintCategory[] }>('/categories'),
       fetchComplaintsJson<{ success: boolean; complaints: ComplaintSummaryItem[] }>('/'),
-      fetch('http://localhost:5000/api/v1/staff', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()) as Promise<{ success: boolean; staff: StaffOption[] }>,
+      fetch('https://api.gatesync.in/api/v1/staff', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()) as Promise<{ success: boolean; staff: StaffOption[] }>,
       fetchCommitteesJson<{ success: boolean; committees: CommitteeSummary[]; available_members: AdminOption[] }>('/'),
     ]);
 

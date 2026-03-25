@@ -730,7 +730,7 @@ export default function CommitteeManagementPage() {
                           <p className="font-semibold text-slate-900 dark:text-white">{document.title}</p>
                           <p className="mt-1 text-xs text-slate-500">{document.category} / {document.uploaded_by_name}</p>
                         </div>
-                        <a href={`http://localhost:5000${document.file_url}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-600">Open</a>
+                        <a href={`https://api.gatesync.in${document.file_url}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-600">Open</a>
                       </div>
                     </div>
                   ))}

@@ -2,7 +2,7 @@
 
 import { getStoredSession } from '@/lib/auth';
 
-export const COMPLAINTS_API_BASE = 'http://localhost:5000/api/v1/complaints';
+export const COMPLAINTS_API_BASE = 'https://api.gatesync.in/api/v1/complaints';
 
 export type ComplaintCategory = {
   id: number;
@@ -88,20 +88,21 @@ export type ComplaintDashboardSummary = {
   staff_performance: Array<{ name: string; type: string; total_assigned: number; resolved_count: number }>;
 };
 
-function getHeaders(includeJson = true) {
+function getHeaders(includeJson = true): Record<string, string> {
   const { token } = getStoredSession();
   if (!token) {
     throw new Error('Authentication required');
   }
 
-  return includeJson
-    ? ({
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      } as Record<string, string>)
-    : ({
-        Authorization: `Bearer ${token}`,
-      } as Record<string, string>);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return headers;
 }
 
 export async function fetchComplaintsJson<T>(path: string): Promise<T> {

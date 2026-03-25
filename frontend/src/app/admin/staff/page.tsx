@@ -144,7 +144,7 @@ const EMPTY_FORM: StaffFormData = {
   missed_visit_alerts: true,
 };
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'https://api.gatesync.in';
 
 function formatDateTime(value: string | null) {
   if (!value) return 'Not available';
@@ -204,7 +204,7 @@ export default function StaffPage() {
 
   const fetchMeta = useCallback(async () => {
     const token = getToken();
-    const response = await fetch('http://localhost:5000/api/v1/staff/meta', {
+    const response = await fetch('https://api.gatesync.in/api/v1/staff/meta', {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json();
@@ -216,7 +216,7 @@ export default function StaffPage() {
 
   const fetchStaff = useCallback(async () => {
     const token = getToken();
-    const response = await fetch('http://localhost:5000/api/v1/staff', {
+    const response = await fetch('https://api.gatesync.in/api/v1/staff', {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json();
@@ -228,7 +228,7 @@ export default function StaffPage() {
 
   const fetchLogs = useCallback(async () => {
     const token = getToken();
-    const response = await fetch('http://localhost:5000/api/v1/staff/logs', {
+    const response = await fetch('https://api.gatesync.in/api/v1/staff/logs', {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json();
@@ -432,7 +432,7 @@ export default function StaffPage() {
     try {
       const token = getToken();
       const response = await fetch(
-        editingStaff ? `http://localhost:5000/api/v1/staff/${editingStaff.id}` : 'http://localhost:5000/api/v1/staff',
+        editingStaff ? `https://api.gatesync.in/api/v1/staff/${editingStaff.id}` : 'https://api.gatesync.in/api/v1/staff',
         {
           method: editingStaff ? 'PUT' : 'POST',
           headers: {
@@ -467,7 +467,7 @@ export default function StaffPage() {
     setActiveStaffId(staff.id);
     try {
       const token = getToken();
-      const response = await fetch(`http://localhost:5000/api/v1/staff/${staff.id}`, {
+      const response = await fetch(`https://api.gatesync.in/api/v1/staff/${staff.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -495,7 +495,7 @@ export default function StaffPage() {
     setActiveStaffId(staff.id);
     try {
       const token = getToken();
-      const response = await fetch(`http://localhost:5000/api/v1/staff/${staff.id}`, {
+      const response = await fetch(`https://api.gatesync.in/api/v1/staff/${staff.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -528,7 +528,7 @@ export default function StaffPage() {
     setActiveStaffId(staff.id);
     try {
       const token = getToken();
-      const response = await fetch('http://localhost:5000/api/v1/staff/log-entry', {
+      const response = await fetch('https://api.gatesync.in/api/v1/staff/log-entry', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -556,7 +556,7 @@ export default function StaffPage() {
     setActiveStaffId(staff.id);
     try {
       const token = getToken();
-      const response = await fetch('http://localhost:5000/api/v1/staff/log-exit', {
+      const response = await fetch('https://api.gatesync.in/api/v1/staff/log-exit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -589,7 +589,7 @@ export default function StaffPage() {
     try {
       const token = getToken();
       const endpoint = staff.has_guard_login ? 'disable-guard-login' : 'enable-guard-login';
-      const response = await fetch(`http://localhost:5000/api/v1/staff/${staff.id}/${endpoint}`, {
+      const response = await fetch(`https://api.gatesync.in/api/v1/staff/${staff.id}/${endpoint}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });

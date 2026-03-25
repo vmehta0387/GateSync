@@ -107,7 +107,7 @@ export default function CommunicationDocumentsPage() {
             <div key={document.id} className="rounded-xl border border-slate-200 bg-white/70 p-4 dark:border-slate-800 dark:bg-slate-900/40">
               <p className="font-semibold text-slate-900 dark:text-white">{document.title}</p>
               <p className="mt-2 text-sm text-slate-500">{document.category} / {document.target_scope}</p>
-              <a href={`http://localhost:5000${document.file_url}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700">Open file</a>
+              <a href={`https://api.gatesync.in${document.file_url}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700">Open file</a>
             </div>
           ))}
         </div>

@@ -34,7 +34,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     const syncProfile = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/v1/auth/me', {
+        const response = await fetch('https://api.gatesync.in/api/v1/auth/me', {
           headers: { Authorization: `Bearer ${session.token}` },
           cache: 'no-store',
         });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 type ApprovalState = {
@@ -9,7 +9,7 @@ type ApprovalState = {
   message: string;
 };
 
-export default function VisitorApprovalPage() {
+function VisitorApprovalContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token') || '';
   const decision = searchParams.get('decision') || '';
@@ -27,7 +27,7 @@ export default function VisitorApprovalPage() {
 
     const submitDecision = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/v1/visitors/public-decision', {
+        const response = await fetch('https://api.gatesync.in/api/v1/visitors/public-decision', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token, decision }),
@@ -70,5 +70,26 @@ export default function VisitorApprovalPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VisitorApprovalPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+          <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
+            <p className="text-sm uppercase tracking-[0.3em] text-blue-300">GateSync</p>
+            <h1 className="mt-4 text-3xl font-bold">Visitor approval</h1>
+            <p className="mt-4 text-base text-slate-300">Please wait while we open the secure approval link.</p>
+            <div className="mt-8 rounded-2xl bg-slate-800 px-4 py-3 text-sm font-medium text-slate-200">
+              Loading approval...
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <VisitorApprovalContent />
+    </Suspense>
   );
 }

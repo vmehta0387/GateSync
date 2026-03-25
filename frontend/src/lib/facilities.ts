@@ -2,7 +2,7 @@
 
 import { getStoredSession } from '@/lib/auth';
 
-export const FACILITIES_API_BASE = 'http://localhost:5000/api/v1/facilities';
+export const FACILITIES_API_BASE = 'https://api.gatesync.in/api/v1/facilities';
 
 export type Facility = {
   id: number;
@@ -68,20 +68,21 @@ export type FacilitySummary = {
   peak_hours: Array<{ hour_label: string; total: number }>;
 };
 
-function getHeaders(includeJson = true) {
+function getHeaders(includeJson = true): Record<string, string> {
   const { token } = getStoredSession();
   if (!token) {
     throw new Error('Authentication required');
   }
 
-  return includeJson
-    ? {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      }
-    : {
-        Authorization: `Bearer ${token}`,
-      };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return headers;
 }
 
 async function readJson<T>(response: Response): Promise<T> {

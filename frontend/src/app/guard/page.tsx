@@ -50,7 +50,7 @@ const initialIncidentForm = {
   attachments: [] as Array<{ file_name?: string; file_path: string; url?: string }>,
 };
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'https://api.gatesync.in';
 
 function EmptyText({ text }: { text: string }) {
   return <p className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">{text}</p>;
@@ -87,7 +87,7 @@ export default function GuardDashboard() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/v1/visitors/logs?limit=100', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/logs?limit=100', {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -178,7 +178,7 @@ export default function GuardDashboard() {
 
     setScanLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/v1/visitors/check-in', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/check-in', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -210,7 +210,7 @@ export default function GuardDashboard() {
 
     setAdHocLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/v1/visitors/walk-in', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/walk-in', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -245,7 +245,7 @@ export default function GuardDashboard() {
     if (!token) return;
 
     try {
-      const response = await fetch('http://localhost:5000/api/v1/visitors/check-out', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/check-out', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -272,7 +272,7 @@ export default function GuardDashboard() {
     if (!token) return;
 
     try {
-      const response = await fetch('http://localhost:5000/api/v1/visitors/check-in', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/check-in', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

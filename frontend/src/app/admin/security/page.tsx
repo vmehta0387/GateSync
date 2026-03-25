@@ -186,7 +186,7 @@ export default function SecurityPage() {
 
   const resolveMediaUrl = (value: string) => {
     if (!value) return '';
-    return value.startsWith('http://') || value.startsWith('https://') ? value : `http://localhost:5000${value}`;
+    return value.startsWith('http://') || value.startsWith('https://') ? value : `https://api.gatesync.in${value}`;
   };
 
   const renderGuardAvatar = (name: string, profilePhotoUrl?: string) => (

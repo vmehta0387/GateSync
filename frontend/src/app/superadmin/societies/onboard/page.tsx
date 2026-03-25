@@ -39,7 +39,7 @@ export default function OnboardWizard() {
 
     try {
       const token = localStorage.getItem('gatepulse_token');
-      const res = await fetch('http://localhost:5000/api/v1/superadmin/societies', {
+      const res = await fetch('https://api.gatesync.in/api/v1/superadmin/societies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(formData)

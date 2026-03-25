@@ -41,7 +41,7 @@ export default function SettingsPage() {
     const fetchSettings = async () => {
       try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch('http://localhost:5000/api/v1/settings', {
+        const res = await fetch('https://api.gatesync.in/api/v1/settings', {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
@@ -61,7 +61,7 @@ export default function SettingsPage() {
     const fetchManagers = async () => {
       try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch('http://localhost:5000/api/v1/settings/managers', {
+        const res = await fetch('https://api.gatesync.in/api/v1/settings/managers', {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
@@ -81,7 +81,7 @@ export default function SettingsPage() {
   const saveSettings = async (updates: SettingsPayload) => {
     try {
       const token = localStorage.getItem('gatepulse_token');
-      await fetch('http://localhost:5000/api/v1/settings', {
+      await fetch('https://api.gatesync.in/api/v1/settings', {
          method: 'PUT',
          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
          body: JSON.stringify({ settings: updates })
@@ -108,7 +108,7 @@ export default function SettingsPage() {
 
   const refreshManagers = async () => {
     const token = localStorage.getItem('gatepulse_token');
-    const res = await fetch('http://localhost:5000/api/v1/settings/managers', {
+    const res = await fetch('https://api.gatesync.in/api/v1/settings/managers', {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
@@ -130,7 +130,7 @@ export default function SettingsPage() {
     try {
       const token = localStorage.getItem('gatepulse_token');
       const res = await fetch(
-        `http://localhost:5000/api/v1/settings/managers${editingManagerId ? `/${editingManagerId}` : ''}`,
+        `https://api.gatesync.in/api/v1/settings/managers${editingManagerId ? `/${editingManagerId}` : ''}`,
         {
           method: editingManagerId ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -166,7 +166,7 @@ export default function SettingsPage() {
   const toggleManagerStatus = async (manager: ManagerRecord) => {
     try {
       const token = localStorage.getItem('gatepulse_token');
-      const res = await fetch(`http://localhost:5000/api/v1/settings/managers/${manager.id}`, {
+      const res = await fetch(`https://api.gatesync.in/api/v1/settings/managers/${manager.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({

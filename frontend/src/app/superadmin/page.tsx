@@ -10,7 +10,7 @@ export default function SuperAdminDashboard() {
     const fetchStats = async () => {
       try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch('http://localhost:5000/api/v1/superadmin/stats', {
+        const res = await fetch('https://api.gatesync.in/api/v1/superadmin/stats', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();

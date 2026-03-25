@@ -304,7 +304,7 @@ export default function ResidentsPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem('gatepulse_token');
-      const res = await fetch('http://localhost:5000/api/v1/residents', {
+      const res = await fetch('https://api.gatesync.in/api/v1/residents', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
@@ -340,7 +340,7 @@ export default function ResidentsPage() {
     try {
       const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
       const token = localStorage.getItem('gatepulse_token');
-      const response = await fetch(`http://localhost:5000/api/v1/residents/${id}`, {
+      const response = await fetch(`https://api.gatesync.in/api/v1/residents/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: newStatus })
@@ -360,7 +360,7 @@ export default function ResidentsPage() {
     try {
       setUpdatingKycId(id);
       const token = localStorage.getItem('gatepulse_token');
-      await fetch(`http://localhost:5000/api/v1/residents/${id}`, {
+      await fetch(`https://api.gatesync.in/api/v1/residents/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ kyc_status: kycStatus })
@@ -377,7 +377,7 @@ export default function ResidentsPage() {
     if (!confirm('Are you sure you want to remove this resident from this flat?')) return;
     try {
       const token = localStorage.getItem('gatepulse_token');
-      await fetch(`http://localhost:5000/api/v1/residents/${id}/remove`, {
+      await fetch(`https://api.gatesync.in/api/v1/residents/${id}/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ flat_id })
@@ -450,7 +450,7 @@ export default function ResidentsPage() {
           }
 
           const payload = buildResidentPayload(record);
-          const response = await fetch('http://localhost:5000/api/v1/residents', {
+          const response = await fetch('https://api.gatesync.in/api/v1/residents', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(payload)
@@ -517,8 +517,9 @@ export default function ResidentsPage() {
   };
 
   const compareText = (left: string, right: string) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
-  const blockOptions = [...new Set(residents.map((resident) => resident.block_name).filter(Boolean))].sort(compareText);
-  const occupancyOptions = [...new Set(residents.map((resident) => resident.occupancy_type).filter(Boolean))].sort(compareText);
+  const isNonEmptyString = (value: string | null | undefined): value is string => Boolean(value);
+  const blockOptions = [...new Set(residents.map((resident) => resident.block_name).filter(isNonEmptyString))].sort(compareText);
+  const occupancyOptions = [...new Set(residents.map((resident) => resident.occupancy_type).filter(isNonEmptyString))].sort(compareText);
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredResidents = residents.filter((resident) => {
     const matchesSearch = !normalizedSearchTerm || [

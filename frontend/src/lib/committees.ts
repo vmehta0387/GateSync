@@ -2,7 +2,7 @@
 
 import { getStoredSession } from '@/lib/auth';
 
-export const COMMITTEES_API_BASE = 'http://localhost:5000/api/v1/committees';
+export const COMMITTEES_API_BASE = 'https://api.gatesync.in/api/v1/committees';
 
 export type CommitteeTemplate = {
   key: string;
@@ -109,20 +109,21 @@ export type CommitteeDetail = {
   documents: CommitteeDocument[];
 };
 
-function getHeaders(includeJson = true) {
+function getHeaders(includeJson = true): Record<string, string> {
   const { token } = getStoredSession();
   if (!token) {
     throw new Error('Authentication required');
   }
 
-  return includeJson
-    ? {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      }
-    : {
-        Authorization: `Bearer ${token}`,
-      };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return headers;
 }
 
 export async function fetchCommitteesJson<T>(path: string): Promise<T> {

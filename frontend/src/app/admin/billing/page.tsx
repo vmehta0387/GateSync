@@ -33,6 +33,21 @@ type BillingConfig = {
   is_active: boolean;
 };
 
+type RuleForm = {
+  title: string;
+  description: string;
+  billing_type: string;
+  frequency: string;
+  calculation_method: string;
+  base_amount: string;
+  due_day: string;
+  auto_generate: boolean;
+  late_fee_type: string;
+  late_fee_value: string;
+  flat_type_amounts: Record<string, string>;
+  breakdown: Array<{ label: string; amount: string; calculation: 'fixed' | 'per_sqft' }>;
+};
+
 type Invoice = {
   id: number;
   invoice_number: string;
@@ -55,13 +70,20 @@ type Reports = {
   flat_wise_dues: Array<{ flat_id: number; block_name: string; flat_number: string; pending_amount: number; overdue_count: number }>;
 };
 
+type CollectionSnapshotRow = {
+  month_year: string;
+  invoiced_amount: number;
+  collected_amount: number;
+  pending_amount?: number;
+};
+
 type BillingTab = 'overview' | 'rules' | 'invoices' | 'reports';
 type InvoiceFilter = 'All' | 'Unpaid' | 'Overdue' | 'Paid' | 'PartiallyPaid';
 type InvoiceAction = 'paid' | 'waive';
 
-const API_BASE = 'http://localhost:5000/api/v1';
+const API_BASE = 'https://api.gatesync.in/api/v1';
 
-const defaultRule = {
+const defaultRule: RuleForm = {
   title: '',
   description: '',
   billing_type: 'MonthlyMaintenance',
@@ -125,7 +147,7 @@ function FieldLabel({ label, hint }: { label: string; hint?: string }) {
   );
 }
 
-function downloadCsv(filename: string, rows: string[][]) {
+function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
   const escapeCell = (value: string | number) => `"${String(value ?? '').replace(/"/g, '""')}"`;
   const csv = rows.map((row) => row.map(escapeCell).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -139,7 +161,7 @@ function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
-function configToRuleForm(config: BillingConfig) {
+function configToRuleForm(config: BillingConfig): RuleForm {
   return {
     title: config.title || '',
     description: config.description || '',
@@ -173,7 +195,7 @@ export default function BillingPage() {
   const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
   const [generationMonth, setGenerationMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [ruleForm, setRuleForm] = useState(defaultRule);
+  const [ruleForm, setRuleForm] = useState<RuleForm>(defaultRule);
   const [activeTab, setActiveTab] = useState<BillingTab>('overview');
   const [invoiceFilter, setInvoiceFilter] = useState<InvoiceFilter>('All');
   const [invoiceSearch, setInvoiceSearch] = useState('');
@@ -359,6 +381,10 @@ export default function BillingPage() {
     { label: 'Penalties Applied', value: summary ? formatCurrency(summary.penalties_applied) : '...', tone: 'text-violet-700' },
   ];
 
+  const collectionSnapshotRows: CollectionSnapshotRow[] = (
+    reports.collection_report.length ? reports.collection_report : (summary?.monthly_revenue || [])
+  ).slice(0, 6);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -437,8 +463,8 @@ export default function BillingPage() {
               <h3 className="text-lg font-bold text-slate-900">Collection Snapshot</h3>
               <p className="mt-1 text-sm text-slate-500">Quick read on monthly billing momentum and where collections are slowing down.</p>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
-                {(reports.collection_report.length ? reports.collection_report : summary?.monthly_revenue || []).slice(0, 6).map((row) => {
-                  const pending = 'pending_amount' in row ? row.pending_amount : row.invoiced_amount - row.collected_amount;
+                {collectionSnapshotRows.map((row) => {
+                  const pending = typeof row.pending_amount === 'number' ? row.pending_amount : row.invoiced_amount - row.collected_amount;
                   return (
                     <div key={row.month_year} className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100">
                       <p className="font-semibold text-slate-900">{row.month_year}</p>

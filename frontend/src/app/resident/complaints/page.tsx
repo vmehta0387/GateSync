@@ -31,7 +31,7 @@ export default function ResidentComplaintsPage() {
     if (!token) return;
 
     const [flatsRes, categoriesRes, complaintsRes] = await Promise.all([
-      fetch('http://localhost:5000/api/v1/residents/me/flats', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()) as Promise<{ success: boolean; flats: FlatOption[] }>,
+      fetch('https://api.gatesync.in/api/v1/residents/me/flats', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()) as Promise<{ success: boolean; flats: FlatOption[] }>,
       fetchComplaintsJson<{ success: boolean; categories: ComplaintCategory[] }>('/categories'),
       fetchComplaintsJson<{ success: boolean; complaints: ComplaintSummaryItem[] }>('/'),
     ]);

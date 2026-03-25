@@ -20,7 +20,7 @@ export default function EditSocietyPage({ params }: { params: Promise<{ id: stri
     const fetchSociety = async () => {
       try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch(`http://localhost:5000/api/v1/superadmin/societies/${societyId}`, {
+        const res = await fetch(`https://api.gatesync.in/api/v1/superadmin/societies/${societyId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -54,7 +54,7 @@ export default function EditSocietyPage({ params }: { params: Promise<{ id: stri
 
     try {
       const token = localStorage.getItem('gatepulse_token');
-      const res = await fetch(`http://localhost:5000/api/v1/superadmin/societies/${societyId}`, {
+      const res = await fetch(`https://api.gatesync.in/api/v1/superadmin/societies/${societyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(formData)
@@ -89,7 +89,7 @@ export default function EditSocietyPage({ params }: { params: Promise<{ id: stri
   const handleGenerateFlats = async () => {
     try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch(`http://localhost:5000/api/v1/superadmin/societies/${societyId}/flats/generate`, {
+        const res = await fetch(`https://api.gatesync.in/api/v1/superadmin/societies/${societyId}/flats/generate`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });

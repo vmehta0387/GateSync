@@ -11,7 +11,7 @@ export default function DeliveriesPage() {
     const fetchDeliveries = async () => {
       try {
         const token = localStorage.getItem('gatepulse_token');
-        const res = await fetch('http://localhost:5000/api/v1/deliveries', {
+        const res = await fetch('https://api.gatesync.in/api/v1/deliveries', {
            headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();

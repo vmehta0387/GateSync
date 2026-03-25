@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 
-const SOCKET_SERVER_URL = 'http://localhost:5000';
+const SOCKET_SERVER_URL = 'https://api.gatesync.in';
 const VISITOR_EVENTS = ['visitor_pending_approval', 'visitor_status_updated'] as const;
 const COMPLAINT_EVENTS = ['complaint_created', 'complaint_updated', 'complaint_message_added'] as const;
 const FACILITY_EVENTS = ['facility_created', 'facility_updated', 'facility_booking_updated', 'facility_maintenance_updated'] as const;

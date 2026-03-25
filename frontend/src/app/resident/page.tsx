@@ -66,10 +66,10 @@ async function loadResidentDashboard(
 ): Promise<ResidentFlat[]> {
   const headers = { Authorization: `Bearer ${token}` };
   const [flatRes, logRes, pendingRes, billingRes] = await Promise.all([
-    fetch('http://localhost:5000/api/v1/residents/me/flats', { headers }),
-    fetch('http://localhost:5000/api/v1/visitors/logs?limit=50', { headers }),
-    fetch('http://localhost:5000/api/v1/visitors/pending', { headers }),
-    fetch('http://localhost:5000/api/v1/billing', { headers }),
+    fetch('https://api.gatesync.in/api/v1/residents/me/flats', { headers }),
+    fetch('https://api.gatesync.in/api/v1/visitors/logs?limit=50', { headers }),
+    fetch('https://api.gatesync.in/api/v1/visitors/pending', { headers }),
+    fetch('https://api.gatesync.in/api/v1/billing', { headers }),
   ]);
 
   const [flatData, logData, pendingData, billingData] = await Promise.all([
@@ -167,7 +167,7 @@ export default function ResidentDashboard() {
     setCopied(false);
 
     try {
-      const response = await fetch('http://localhost:5000/api/v1/visitors/pre-approve', {
+      const response = await fetch('https://api.gatesync.in/api/v1/visitors/pre-approve', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -219,7 +219,7 @@ export default function ResidentDashboard() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/v1/visitors/${decision}/${logId}`, {
+      const response = await fetch(`https://api.gatesync.in/api/v1/visitors/${decision}/${logId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -500,7 +500,7 @@ export default function ResidentDashboard() {
                           aria-label={`${log.visitor_name} photo`}
                           role="img"
                           className="h-16 w-16 rounded-xl border border-slate-200 bg-cover bg-center dark:border-slate-700"
-                          style={{ backgroundImage: `url(http://localhost:5000${log.visitor_photo_url})` }}
+                          style={{ backgroundImage: `url(https://api.gatesync.in${log.visitor_photo_url})` }}
                         />
                       </div>
                     )}

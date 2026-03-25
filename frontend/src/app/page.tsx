@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError('');
     
     try {
-      const res = await fetch('http://localhost:5000/api/v1/auth/send-otp', {
+      const res = await fetch('https://api.gatesync.in/api/v1/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone_number: phoneNumber })
@@ -45,7 +45,7 @@ export default function LoginPage() {
     setError('');
     
     try {
-      const res = await fetch('http://localhost:5000/api/v1/auth/verify-otp', {
+      const res = await fetch('https://api.gatesync.in/api/v1/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone_number: phoneNumber, otp })
