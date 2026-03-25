@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS user_flats (
     user_id INT,
     flat_id INT,
     type ENUM('Owner', 'Tenant', 'Family', 'Co-owner') NOT NULL,
+    access_role ENUM('Primary', 'Secondary') NOT NULL DEFAULT 'Primary',
     move_in_date DATE NULL,
     move_out_date DATE NULL,
     PRIMARY KEY (user_id, flat_id),

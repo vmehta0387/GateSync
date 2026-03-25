@@ -3,7 +3,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { getIO } = require('../websocket/socket');
 const { sendBulkSms } = require('../services/smsService');
-const { sendPushToFlatResidents, sendPushToSocietyGuards } = require('../services/pushNotificationService');
+const { sendPushToFlatResidents, sendPushToFlatApprovalResidents, sendPushToSocietyGuards } = require('../services/pushNotificationService');
 
 const VISITOR_TYPES = ['Guest', 'Delivery', 'Cab', 'Service', 'Unknown'];
 const DEFAULT_RULES = {
@@ -272,12 +272,39 @@ const requireResidentFlatAccess = async (userId, flatId) => {
     return rows.length > 0;
 };
 
+const requireResidentApprovalAccess = async (userId, flatId) => {
+    const [rows] = await db.query(
+        `SELECT uf.flat_id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
+         WHERE uf.user_id = ? AND uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE'
+           AND COALESCE(u.can_approve_visitors, 1) = 1
+         LIMIT 1`,
+        [userId, flatId]
+    );
+
+    return rows.length > 0;
+};
+
 const getFlatResidentUserIds = async (flatId) => {
     const [rows] = await db.query(
         `SELECT DISTINCT u.id
          FROM user_flats uf
          INNER JOIN users u ON u.id = uf.user_id
-         WHERE uf.flat_id = ? AND u.role = 'RESIDENT'`,
+         WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE'`,
+        [flatId]
+    );
+
+    return rows.map((row) => row.id);
+};
+
+const getFlatApprovalResidentUserIds = async (flatId) => {
+    const [rows] = await db.query(
+        `SELECT DISTINCT u.id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
+         WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE'
+           AND COALESCE(u.can_approve_visitors, 1) = 1`,
         [flatId]
     );
 
@@ -289,7 +316,8 @@ const getFlatResidentNotificationTargets = async (flatId) => {
         `SELECT DISTINCT u.id, u.phone_number
          FROM user_flats uf
          INNER JOIN users u ON u.id = uf.user_id
-         WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND COALESCE(u.sms_alerts, 0) = 1`,
+         WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE'
+           AND COALESCE(u.sms_alerts, 0) = 1 AND COALESCE(u.can_approve_visitors, 1) = 1`,
         [flatId]
     );
 
@@ -398,6 +426,7 @@ const applyVisitorDecision = async ({ logId, nextStatus, approvalType = 'Manual'
     );
 
     const residentUserIds = await getFlatResidentUserIds(log.flat_id);
+    const approvalResidentUserIds = await getFlatApprovalResidentUserIds(log.flat_id);
     emitToRooms(
         buildLiveRooms({
             societyId: log.society_id,
@@ -431,6 +460,17 @@ const applyVisitorDecision = async ({ logId, nextStatus, approvalType = 'Manual'
             });
         }
     });
+
+    if (approvalResidentUserIds.length && resolvedStatus === 'Denied') {
+        await notifyPushSafely(async () => {
+            await sendPushToFlatResidents({
+                flatId: log.flat_id,
+                title: 'Visitor denied',
+                body: `${log.visitor_name} was denied for ${log.block_name}-${log.flat_number}.`,
+                data: { type: 'visitor_status_updated', log_id: logId, flat_id: log.flat_id, status: resolvedStatus },
+            });
+        });
+    }
 
     return { log, status: resolvedStatus };
 };
@@ -555,7 +595,7 @@ const createWalkInLog = async ({ req, flatTarget, payload, rules: providedRules,
 
     await notifyPushSafely(async () => {
         if (approvalRequired) {
-            await sendPushToFlatResidents({
+            await sendPushToFlatApprovalResidents({
                 flatId,
                 title: 'Visitor waiting at gate',
                 body: `${payload.name} (${payload.purpose}) is waiting at ${flat.block_name}-${flat.flat_number}.`,
@@ -787,9 +827,9 @@ exports.preApproveVisitor = async (req, res) => {
         }
 
         if (req.user.role === 'RESIDENT') {
-            const allowed = await requireResidentFlatAccess(req.user.id, flatId);
+            const allowed = await requireResidentApprovalAccess(req.user.id, flatId);
             if (!allowed) {
-                return res.status(403).json({ success: false, message: 'You can only pre-approve visitors for your own flat' });
+                return res.status(403).json({ success: false, message: 'You need resident approval access for this flat' });
             }
         }
 
@@ -984,9 +1024,9 @@ exports.approveVisitor = async (req, res) => {
         }
 
         if (req.user.role === 'RESIDENT') {
-            const allowed = await requireResidentFlatAccess(req.user.id, log.flat_id);
+            const allowed = await requireResidentApprovalAccess(req.user.id, log.flat_id);
             if (!allowed) {
-                return res.status(403).json({ success: false, message: 'You can only approve visitors for your own flat' });
+                return res.status(403).json({ success: false, message: 'You need resident approval access for this flat' });
             }
         }
 
@@ -1028,9 +1068,9 @@ exports.denyVisitor = async (req, res) => {
         }
 
         if (req.user.role === 'RESIDENT') {
-            const allowed = await requireResidentFlatAccess(req.user.id, log.flat_id);
+            const allowed = await requireResidentApprovalAccess(req.user.id, log.flat_id);
             if (!allowed) {
-                return res.status(403).json({ success: false, message: 'You can only deny visitors for your own flat' });
+                return res.status(403).json({ success: false, message: 'You need resident approval access for this flat' });
             }
         }
 

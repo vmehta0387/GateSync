@@ -129,6 +129,20 @@ async function getFlatResidentUserIds(flatId) {
     return rows.map((row) => row.id);
 }
 
+async function getFlatApprovalResidentUserIds(flatId) {
+    const [rows] = await db.query(
+        `SELECT DISTINCT u.id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
+         WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE'
+           AND COALESCE(u.push_notifications, 1) = 1
+           AND COALESCE(u.can_approve_visitors, 1) = 1`,
+        [flatId]
+    );
+
+    return rows.map((row) => row.id);
+}
+
 async function getSocietyGuardUserIds(societyId) {
     const [rows] = await db.query(
         `SELECT id
@@ -145,6 +159,11 @@ async function sendPushToFlatResidents({ flatId, title, body, data = {} }) {
     return sendPushToUsers({ userIds: residentUserIds, title, body, data });
 }
 
+async function sendPushToFlatApprovalResidents({ flatId, title, body, data = {} }) {
+    const residentUserIds = await getFlatApprovalResidentUserIds(flatId);
+    return sendPushToUsers({ userIds: residentUserIds, title, body, data });
+}
+
 async function sendPushToSocietyGuards({ societyId, title, body, data = {} }) {
     const guardUserIds = await getSocietyGuardUserIds(societyId);
     return sendPushToUsers({ userIds: guardUserIds, title, body, data });
@@ -154,5 +173,6 @@ module.exports = {
     isExpoPushToken,
     sendPushToUsers,
     sendPushToFlatResidents,
+    sendPushToFlatApprovalResidents,
     sendPushToSocietyGuards,
 };

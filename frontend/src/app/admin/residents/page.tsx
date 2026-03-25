@@ -13,6 +13,7 @@ type ResidentDirectoryItem = {
   kyc_status: 'Pending' | 'Verified' | 'Rejected';
   flat_id: number | null;
   occupancy_type: string;
+  access_role: 'Primary' | 'Secondary';
   block_name: string | null;
   flat_number: string | null;
 };
@@ -29,6 +30,7 @@ const BULK_IMPORT_HEADERS = [
   'flat_number',
   'flat_type',
   'occupancy_type',
+  'access_role',
   'move_in_date',
   'move_out_date',
   'id_type',
@@ -68,6 +70,7 @@ const BULK_IMPORT_SAMPLE_ROWS = [
     flat_number: '1403',
     flat_type: '3BHK',
     occupancy_type: 'Owner',
+    access_role: 'Primary',
     move_in_date: '2025-06-01',
     move_out_date: '',
     id_type: 'Aadhaar',
@@ -105,6 +108,7 @@ const BULK_IMPORT_SAMPLE_ROWS = [
     flat_number: '0902',
     flat_type: '2BHK',
     occupancy_type: 'Tenant',
+    access_role: 'Secondary',
     move_in_date: '2026-01-15',
     move_out_date: '2027-01-14',
     id_type: 'PAN',
@@ -232,6 +236,7 @@ function buildResidentPayload(record: CsvRecord) {
       flat_number: record.flat_number || '',
       flat_type: record.flat_type || '',
       occupancy_type: record.occupancy_type || 'Owner',
+      access_role: record.access_role || 'Primary',
       move_in_date: record.move_in_date || '',
       move_out_date: record.move_out_date || '',
     },
@@ -273,6 +278,11 @@ function validateResidentRecord(record: CsvRecord) {
   const occupancyType = record.occupancy_type?.trim();
   if (occupancyType && !['Owner', 'Tenant', 'Family', 'Co-owner'].includes(occupancyType)) {
     return 'Occupancy type must be Owner, Tenant, Family, or Co-owner';
+  }
+
+  const accessRole = record.access_role?.trim();
+  if (accessRole && !['Primary', 'Secondary'].includes(accessRole)) {
+    return 'Access role must be Primary or Secondary';
   }
 
   const flatType = record.flat_type?.trim();
@@ -317,6 +327,7 @@ export default function ResidentsPage() {
             block_name: resident.block_name || null,
             flat_number: resident.flat_number || null,
             occupancy_type: resident.occupancy_type || 'Unassigned',
+            access_role: resident.access_role || 'Primary',
             flat_id: resident.flat_id || null,
           }))
         );
@@ -723,6 +734,9 @@ export default function ResidentsPage() {
                     <ArrowUpDown className={`h-3.5 w-3.5 ${sortKey === 'occupancy_type' ? 'text-brand-500' : 'text-slate-400'}`} />
                   </button>
                 </th>
+                <th className="sticky top-0 z-10 w-[10%] border-b border-slate-200 bg-slate-50 px-3 py-2.5 font-medium dark:border-slate-800 dark:bg-slate-950/95">
+                  App Role
+                </th>
                 <th className="sticky top-0 z-10 w-[11%] border-b border-slate-200 bg-slate-50 px-3 py-2.5 font-medium dark:border-slate-800 dark:bg-slate-950/95">
                   <button onClick={() => handleSort('status')} className="flex items-center gap-2">
                     <span>Access</span>
@@ -742,9 +756,9 @@ export default function ResidentsPage() {
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {loading ? (
-                <tr><td colSpan={7} className="p-8 text-center text-slate-500">Loading resident directory...</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-slate-500">Loading resident directory...</td></tr>
               ) : sortedResidents.length === 0 ? (
-                <tr><td colSpan={7} className="p-8 text-center text-slate-500">{filtersActive ? 'No residents match the current filters.' : 'No residents registered yet.'}</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-slate-500">{filtersActive ? 'No residents match the current filters.' : 'No residents registered yet.'}</td></tr>
               ) : paginatedResidents.map((resident) => (
                 <tr key={`${resident.id}-${resident.flat_number || 'unmapped'}`} className={`hover:bg-slate-50/70 dark:hover:bg-slate-900/50 transition-colors ${resident.status !== 'ACTIVE' ? 'opacity-60' : ''}`}>
                   <td className="px-3 py-2.5">
@@ -777,6 +791,11 @@ export default function ResidentsPage() {
                   <td className="px-3 py-2.5">
                     <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium ${resident.occupancy_type === 'Owner' ? 'bg-purple-100 text-purple-700' : resident.occupancy_type === 'Tenant' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
                       {resident.occupancy_type}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium ${resident.access_role === 'Primary' ? 'bg-indigo-100 text-indigo-700' : 'bg-cyan-100 text-cyan-700'}`}>
+                      {resident.access_role}
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
@@ -895,6 +914,7 @@ export default function ResidentsPage() {
                   <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                     <p>`basic`: name, email, phone</p>
                     <p>`flat`: tower, flat number, flat type, occupancy, move-in/out dates</p>
+                    <p>`access_role`: `Primary` or `Secondary` resident app access</p>
                     <p>`identity`: ID type, number, proof URL</p>
                     <p>`emergency`: name, relation, phone</p>
                     <p>`notifications` and `permissions` as TRUE/FALSE columns</p>
@@ -909,6 +929,7 @@ export default function ResidentsPage() {
                     <p>`phone_number` must be exactly 10 digits</p>
                     <p>`flat_type` should be like `1BHK`, `2BHK`, `3BHK`, `Villa`</p>
                     <p>`occupancy_type` must be `Owner`, `Tenant`, `Family`, or `Co-owner`</p>
+                    <p>`access_role` must be `Primary` or `Secondary`</p>
                     <p>Leave unused optional columns blank</p>
                     <p>Dates should be in `YYYY-MM-DD` format</p>
                   </div>

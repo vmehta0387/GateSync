@@ -16,6 +16,7 @@
     "upgrade:manager": "node src/config/upgradeManagerModule.js",
     "upgrade:security": "node src/config/upgradeSecurityModule.js",
     "upgrade:push": "node src/config/upgradePushNotifications.js",
+    "upgrade:resident-access": "node src/config/upgradeResidentAccessModule.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

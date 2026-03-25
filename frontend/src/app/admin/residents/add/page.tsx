@@ -5,6 +5,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const FLAT_TYPE_OPTIONS = ['Studio', '1RK', '1BHK', '2BHK', '2.5BHK', '3BHK', '3.5BHK', '4BHK', 'Villa', 'Penthouse', 'Other'];
+const ACCESS_ROLE_OPTIONS = [
+  { value: 'Primary', label: 'Primary resident access' },
+  { value: 'Secondary', label: 'Secondary resident access' },
+];
 const defaultNotifications = { push_notifications: true, sms_alerts: true, whatsapp_alerts: false };
 const defaultPermissions = { can_approve_visitors: true, can_view_bills: true, can_raise_complaints: true };
 const PERMISSION_OPTIONS: Array<{ key: keyof typeof defaultPermissions; label: string }> = [
@@ -25,7 +29,7 @@ export default function AddResidentWizard() {
 
   // State Payload Tree
   const [basic, setBasic] = useState({ name: '', email: '', phone_number: '' });
-  const [flat, setFlat] = useState({ block_name: '', floor: '', flat_number: '', flat_type: '', occupancy_type: 'Owner', move_in_date: '', move_out_date: '' });
+  const [flat, setFlat] = useState({ block_name: '', floor: '', flat_number: '', flat_type: '', occupancy_type: 'Owner', access_role: 'Primary', move_in_date: '', move_out_date: '' });
   const [identity, setIdentity] = useState({ id_type: 'Aadhaar', id_number: '', id_proof_url: '' });
   const [emergency, setEmergency] = useState({ emergency_name: '', emergency_relation: '', emergency_phone: '' });
   const [notifications, setNotifications] = useState(defaultNotifications);
@@ -127,6 +131,15 @@ export default function AddResidentWizard() {
                      <option value="Family">Family Member</option>
                      <option value="Co-owner">Co-owner</option>
                    </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">App Access Role</label>
+                  <select value={flat.access_role} onChange={e=>setFlat({...flat, access_role: e.target.value})} className="w-full mt-1.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 outline-none focus:border-brand-500 appearance-none">
+                    {ACCESS_ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-xs text-slate-500">Each flat can have one primary and one secondary resident account for approvals and notifications.</p>
                 </div>
              </div>
           </div>

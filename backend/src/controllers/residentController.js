@@ -1,5 +1,7 @@
 const db = require('../config/db');
 
+const RESIDENT_ACCESS_ROLES = ['Primary', 'Secondary'];
+
 const normalizeResidentDate = (rawValue) => {
     if (!rawValue) return null;
 
@@ -23,6 +25,28 @@ const normalizeResidentDate = (rawValue) => {
     }
 
     return parsedDate.toISOString().split('T')[0];
+};
+
+const normalizeAccessRole = (rawValue) => (
+    RESIDENT_ACCESS_ROLES.includes(String(rawValue || '').trim())
+        ? String(rawValue).trim()
+        : 'Primary'
+);
+
+const ensureFlatAccessRoleAvailable = async ({ flatId, accessRole, userId = null }) => {
+    const [rows] = await db.query(
+        `SELECT uf.user_id
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
+         WHERE uf.flat_id = ?
+           AND uf.access_role = ?
+           AND u.role = 'RESIDENT'
+           AND (? IS NULL OR uf.user_id <> ?)
+         LIMIT 1`,
+        [flatId, accessRole, userId, userId]
+    );
+
+    return rows.length === 0;
 };
 
 exports.getResidentById = async (req, res) => {
@@ -77,6 +101,7 @@ exports.getResidentById = async (req, res) => {
                     flat_type: flatData.flat_type || '',
                     floor: '',
                     occupancy_type: flatData.type || 'Owner',
+                    access_role: flatData.access_role || 'Primary',
                     move_in_date: flatData.move_in_date ? new Date(flatData.move_in_date).toISOString().split('T')[0] : '',
                     move_out_date: flatData.move_out_date ? new Date(flatData.move_out_date).toISOString().split('T')[0] : '',
                     flat_id: flatData.flat_id || ''
@@ -112,7 +137,8 @@ exports.getResidents = async (req, res) => {
     try {
         const [residents] = await db.query(`
             SELECT u.id, u.name, u.email, u.phone_number, UPPER(u.status) AS status, u.kyc_status,
-                   uf.flat_id, COALESCE(uf.type, 'Unassigned') as occupancy_type, f.block_name, f.flat_number
+                   uf.flat_id, COALESCE(uf.type, 'Unassigned') as occupancy_type,
+                   COALESCE(uf.access_role, 'Primary') as access_role, f.block_name, f.flat_number
             FROM users u
             LEFT JOIN user_flats uf ON u.id = uf.user_id
             LEFT JOIN flats f ON uf.flat_id = f.id
@@ -129,7 +155,7 @@ exports.getResidents = async (req, res) => {
 exports.getMyFlats = async (req, res) => {
     try {
         const [flats] = await db.query(`
-            SELECT uf.flat_id, uf.type, f.block_name, f.flat_number
+            SELECT uf.flat_id, uf.type, uf.access_role, f.block_name, f.flat_number
             FROM user_flats uf
             JOIN flats f ON uf.flat_id = f.id
             WHERE uf.user_id = ?
@@ -229,6 +255,7 @@ exports.addResident = async (req, res) => {
         const flat_number = payload.flat?.flat_number || payload.flat_number;
         const flat_type = payload.flat?.flat_type || payload.flat_type || null;
         const occupancy_type = payload.flat?.occupancy_type || payload.occupancy_type || 'Owner';
+        const access_role = normalizeAccessRole(payload.flat?.access_role || payload.access_role);
         const move_in_date = normalizeResidentDate(payload.flat?.move_in_date);
         const move_out_date = normalizeResidentDate(payload.flat?.move_out_date);
 
@@ -298,11 +325,24 @@ exports.addResident = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Flat information (Tower/Flat Number) is required' });
         }
 
+        const accessRoleAvailable = await ensureFlatAccessRoleAvailable({
+            flatId: flat_id,
+            accessRole: access_role,
+            userId,
+        });
+
+        if (!accessRoleAvailable) {
+            return res.status(409).json({
+                success: false,
+                message: `${access_role} resident access is already assigned for this flat`,
+            });
+        }
+
         await db.query('DELETE FROM user_flats WHERE user_id = ?', [userId]);
         await db.query(`
-            INSERT INTO user_flats (user_id, flat_id, type, move_in_date, move_out_date)
-            VALUES (?, ?, ?, ?, ?)
-        `, [userId, flat_id, occupancy_type, move_in_date, move_out_date]);
+            INSERT INTO user_flats (user_id, flat_id, type, access_role, move_in_date, move_out_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `, [userId, flat_id, occupancy_type, access_role, move_in_date, move_out_date]);
 
         if (payload.vehicles && Array.isArray(payload.vehicles)) {
             for (const vehicle of payload.vehicles) {
@@ -390,6 +430,7 @@ exports.updateResident = async (req, res) => {
             let flatIdResolved = flat?.flat_id || null;
             const moveInDate = normalizeResidentDate(flat?.move_in_date);
             const moveOutDate = normalizeResidentDate(flat?.move_out_date);
+            const accessRole = normalizeAccessRole(flat?.access_role);
 
             await db.query(`
                 UPDATE users SET
@@ -428,10 +469,23 @@ exports.updateResident = async (req, res) => {
                     flatIdResolved = flatResult.insertId;
                 }
 
+                const accessRoleAvailable = await ensureFlatAccessRoleAvailable({
+                    flatId: flatIdResolved,
+                    accessRole: accessRole,
+                    userId: Number(id),
+                });
+
+                if (!accessRoleAvailable) {
+                    return res.status(409).json({
+                        success: false,
+                        message: `${accessRole} resident access is already assigned for this flat`,
+                    });
+                }
+
                 await db.query('DELETE FROM user_flats WHERE user_id = ?', [id]);
                 await db.query(
-                    'INSERT INTO user_flats (user_id, flat_id, type, move_in_date, move_out_date) VALUES (?, ?, ?, ?, ?)',
-                    [id, flatIdResolved, flat.occupancy_type || 'Owner', moveInDate, moveOutDate]
+                    'INSERT INTO user_flats (user_id, flat_id, type, access_role, move_in_date, move_out_date) VALUES (?, ?, ?, ?, ?, ?)',
+                    [id, flatIdResolved, flat.occupancy_type || 'Owner', accessRole, moveInDate, moveOutDate]
                 );
             }
 
