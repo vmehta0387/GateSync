@@ -100,7 +100,7 @@ const postExpoMessages = async (messages = []) => {
     };
 };
 
-async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = 'default' }) {
+async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = 'default', categoryId }) {
     const tokens = await fetchActiveTokensForUsers(userIds);
     if (!tokens.length) {
         return { attempted: 0, sent: 0, invalid_tokens: [] };
@@ -112,6 +112,7 @@ async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = '
         body,
         data,
         sound,
+        ...(categoryId ? { categoryId } : {}),
     }));
 
     return postExpoMessages(messages);
@@ -154,19 +155,19 @@ async function getSocietyGuardUserIds(societyId) {
     return rows.map((row) => row.id);
 }
 
-async function sendPushToFlatResidents({ flatId, title, body, data = {} }) {
+async function sendPushToFlatResidents({ flatId, title, body, data = {}, categoryId }) {
     const residentUserIds = await getFlatResidentUserIds(flatId);
-    return sendPushToUsers({ userIds: residentUserIds, title, body, data });
+    return sendPushToUsers({ userIds: residentUserIds, title, body, data, categoryId });
 }
 
-async function sendPushToFlatApprovalResidents({ flatId, title, body, data = {} }) {
+async function sendPushToFlatApprovalResidents({ flatId, title, body, data = {}, categoryId }) {
     const residentUserIds = await getFlatApprovalResidentUserIds(flatId);
-    return sendPushToUsers({ userIds: residentUserIds, title, body, data });
+    return sendPushToUsers({ userIds: residentUserIds, title, body, data, categoryId });
 }
 
-async function sendPushToSocietyGuards({ societyId, title, body, data = {} }) {
+async function sendPushToSocietyGuards({ societyId, title, body, data = {}, categoryId }) {
     const guardUserIds = await getSocietyGuardUserIds(societyId);
-    return sendPushToUsers({ userIds: guardUserIds, title, body, data });
+    return sendPushToUsers({ userIds: guardUserIds, title, body, data, categoryId });
 }
 
 module.exports = {

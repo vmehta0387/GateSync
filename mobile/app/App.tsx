@@ -2,13 +2,17 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { syncPushRegistration } from './src/lib/notifications';
+import { initializeNotificationActions, syncPushRegistration } from './src/lib/notifications';
 import { SessionProvider, useSession } from './src/providers/SessionProvider';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { colors } from './src/theme';
 
 function AppContent() {
   const { hydrated, session } = useSession();
+
+  useEffect(() => {
+    void initializeNotificationActions();
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !session) {

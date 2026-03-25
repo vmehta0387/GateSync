@@ -18,7 +18,6 @@ import {
   fetchImportantContacts,
   fetchInvoices,
   fetchNotices,
-  payInvoice,
   fetchResidentFlats,
   fetchResidentStaffDirectory,
   fetchSharedDocuments,
@@ -219,19 +218,6 @@ export function ResidentUtilityScreen({
   );
   const insideVisitors = useMemo(() => logs.filter((log) => log.status === 'CheckedIn'), [logs]);
 
-  const handlePayInvoice = async (invoice: Invoice) => {
-    const response = await payInvoice(invoice.id, {
-      amount: invoice.balance_amount || invoice.total_amount || invoice.amount,
-      payment_method: 'UPI',
-    });
-    if (!response.success) {
-      Alert.alert('Payment failed', response.message || 'Unable to process payment right now.');
-      return;
-    }
-    Alert.alert('Payment recorded', 'This mock payment has been marked as successful.');
-    await loadData();
-  };
-
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -258,7 +244,7 @@ export function ResidentUtilityScreen({
               <Text style={styles.billingHeroEyebrow}>Billing desk</Text>
               <Text style={styles.billingHeroTitle}>Keep maintenance dues clear and predictable.</Text>
               <Text style={styles.billingHeroSubtitle}>
-                Review current charges, open invoice detail, and make payments without hunting through past records.
+                Review current charges and open invoice detail without hunting through past records.
               </Text>
               <View style={styles.summaryRow}>
                 <MetricCard label="Pending amount" value={`Rs ${unpaidTotal.toFixed(0)}`} tone="danger" />
@@ -342,11 +328,6 @@ export function ResidentUtilityScreen({
                     </View>
                   ) : null}
                   <View style={styles.actionRow}>
-                    {['Unpaid', 'Overdue', 'PartiallyPaid'].includes(selectedInvoice.status) ? (
-                      <Pressable style={styles.openButton} onPress={() => void handlePayInvoice(selectedInvoice)}>
-                        <Text style={styles.openButtonText}>Pay now</Text>
-                      </Pressable>
-                    ) : null}
                     {selectedInvoice.pdf_url ? (
                       <Pressable style={styles.secondaryButton} onPress={() => void openLink(selectedInvoice.pdf_url || '', selectedInvoice.invoice_number || 'Invoice PDF')}>
                         <Text style={styles.secondaryButtonText}>Open invoice</Text>
@@ -378,11 +359,6 @@ export function ResidentUtilityScreen({
                       <Pressable style={styles.secondaryButton} onPress={() => setSelectedInvoiceId(invoice.id)}>
                         <Text style={styles.secondaryButtonText}>View detail</Text>
                       </Pressable>
-                      {['Unpaid', 'Overdue', 'PartiallyPaid'].includes(invoice.status) ? (
-                        <Pressable style={styles.openButton} onPress={() => void handlePayInvoice(invoice)}>
-                          <Text style={styles.openButtonText}>Pay now</Text>
-                        </Pressable>
-                      ) : null}
                     </View>
                   </View>
                 ))
