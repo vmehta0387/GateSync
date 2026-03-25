@@ -696,7 +696,24 @@ exports.generateInvoice = async (req, res) => {
                 return res.status(400).json({ success: false, message: 'Month must be in YYYY-MM format' });
             }
 
-            const [flats] = await db.query(`SELECT id, block_name, flat_number, flat_type, area_sqft, billing_custom_amount FROM flats WHERE society_id = ? ORDER BY block_name ASC, flat_number ASC`, [req.user.society_id]);
+            const [flats] = await db.query(
+                `SELECT DISTINCT
+                    f.id,
+                    f.block_name,
+                    f.flat_number,
+                    f.flat_type,
+                    f.area_sqft,
+                    f.billing_custom_amount
+                 FROM flats f
+                 INNER JOIN user_flats uf ON uf.flat_id = f.id
+                 INNER JOIN users u ON u.id = uf.user_id
+                 WHERE f.society_id = ?
+                   AND u.society_id = ?
+                   AND u.role = 'RESIDENT'
+                   AND u.status = 'ACTIVE'
+                 ORDER BY f.block_name ASC, f.flat_number ASC`,
+                [req.user.society_id, req.user.society_id]
+            );
             const dueDate = req.body.due_date ? formatDate(req.body.due_date) : `${monthYear}-${String(config.due_day || 10).padStart(2, '0')}`;
 
             let generated = 0;
