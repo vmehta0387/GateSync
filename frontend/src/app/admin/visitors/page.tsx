@@ -51,6 +51,37 @@ const DEFAULT_RULES: VisitorRules = {
   smsFallbackEnabled: false,
 };
 
+function formatDateParam(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftDays(baseDate: Date, days: number) {
+  const next = new Date(baseDate);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function buildDateRange(dayCount: number) {
+  const today = new Date();
+  return {
+    from: formatDateParam(shiftDays(today, -(dayCount - 1))),
+    to: formatDateParam(today),
+  };
+}
+
+function formatDateLabel(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export default function VisitorsPage() {
   const [logs, setLogs] = useState<VisitorLog[]>([]);
   const [rules, setRules] = useState<VisitorRules>(DEFAULT_RULES);
@@ -59,14 +90,23 @@ export default function VisitorsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [logView, setLogView] = useState<'recent' | 'range'>('recent');
+  const [recentWindowDays, setRecentWindowDays] = useState(2);
+  const [appliedRange, setAppliedRange] = useState(() => buildDateRange(7));
+  const [draftRange, setDraftRange] = useState(() => buildDateRange(7));
 
   const fetchPageData = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('gatepulse_token');
       const headers = { Authorization: `Bearer ${token}` };
+      const activeRange = logView === 'recent' ? buildDateRange(recentWindowDays) : appliedRange;
+      const logsUrl = new URL('https://api.gatesync.in/api/v1/visitors/logs');
+      logsUrl.searchParams.set('limit', '200');
+      logsUrl.searchParams.set('date_from', activeRange.from);
+      logsUrl.searchParams.set('date_to', activeRange.to);
       const [logsRes, rulesRes] = await Promise.all([
-        fetch('https://api.gatesync.in/api/v1/visitors/logs?limit=200', { headers }),
+        fetch(logsUrl.toString(), { headers }),
         fetch('https://api.gatesync.in/api/v1/visitors/rules', { headers }),
       ]);
 
@@ -82,7 +122,7 @@ export default function VisitorsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliedRange, logView, recentWindowDays]);
 
   useEffect(() => {
     fetchPageData();
@@ -117,6 +157,11 @@ export default function VisitorsPage() {
       return matchesSearch && matchesStatus && matchesType;
     });
   }, [logs, search, statusFilter, typeFilter]);
+
+  const activeWindowLabel = useMemo(() => {
+    const activeRange = logView === 'recent' ? buildDateRange(recentWindowDays) : appliedRange;
+    return `${formatDateLabel(activeRange.from)} to ${formatDateLabel(activeRange.to)}`;
+  }, [appliedRange, logView, recentWindowDays]);
 
   const stats = [
     { label: 'Pending Approvals', value: logs.filter((log) => log.status === 'Pending').length, icon: BellRing, tone: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-300' },
@@ -247,9 +292,78 @@ export default function VisitorsPage() {
         <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">Visitor Logs & History</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Filter by status, type, flat, vehicle, and search terms.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Initial load stays limited to today and yesterday. Expand only when needed or pull a custom date range.
+            </p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setLogView('recent')}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                logView === 'recent'
+                  ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                  : 'border border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+              }`}
+            >
+              Recent
+            </button>
+            <button
+              type="button"
+              onClick={() => setLogView('range')}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                logView === 'range'
+                  ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                  : 'border border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+              }`}
+            >
+              Date Range
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Loaded window</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{activeWindowLabel}</p>
+            </div>
+
+            {logView === 'recent' ? (
+              <button
+                type="button"
+                onClick={() => setRecentWindowDays((current) => current + 2)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              >
+                Load previous 2 days
+              </button>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <input
+                  type="date"
+                  value={draftRange.from}
+                  onChange={(event) => setDraftRange((current) => ({ ...current, from: event.target.value }))}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+                />
+                <input
+                  type="date"
+                  value={draftRange.to}
+                  onChange={(event) => setDraftRange((current) => ({ ...current, to: event.target.value }))}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAppliedRange(draftRange)}
+                  className="rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400"
+                >
+                  Load range
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -276,7 +390,6 @@ export default function VisitorsPage() {
               <option value="Service">Service</option>
               <option value="Unknown">Unknown</option>
             </select>
-          </div>
         </div>
 
         <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">

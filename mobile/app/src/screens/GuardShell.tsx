@@ -17,7 +17,6 @@ import {
   fetchSocietyFlats,
   fetchStaffDirectory,
   fetchVisitorLogs,
-  logQuickActivity,
   logStaffEntry,
   logStaffExit,
   startShift,
@@ -143,7 +142,6 @@ export function GuardShell() {
             openIncidents={openIncidents.slice(0, 4)}
             onStartShift={() => withReload(() => startShift(upcomingShift?.id || 0))}
             onEndShift={() => withReload(() => endShift(activeShift?.id || 0))}
-            onLogActivity={(type, note) => withReload(() => logQuickActivity(type, note))}
           />
         ) : null}
 

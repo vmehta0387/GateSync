@@ -34,19 +34,6 @@ export function ResidentProfileScreen() {
         <ProfileRow label="Login phone" value={session?.user.phone_number || 'Not available'} />
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>About this app</Text>
-        <Text style={styles.note}>
-          Use GateSync to manage visitors, dues, complaints, amenities, and important society updates from one place.
-        </Text>
-        <View style={styles.tipCard}>
-          <Text style={styles.tipTitle}>Quick reminder</Text>
-          <Text style={styles.tipBody}>
-            Keep push notifications enabled so you do not miss gate approvals, complaint updates, or important notices.
-          </Text>
-        </View>
-      </View>
-
       <View style={styles.logoutPanel}>
         <View style={styles.logoutCopy}>
           <Text style={styles.logoutTitle}>End session</Text>
@@ -144,29 +131,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     textAlign: 'right',
-  },
-  note: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  tipCard: {
-    borderRadius: 18,
-    backgroundColor: '#eef4ff',
-    borderWidth: 1,
-    borderColor: '#cfe0ff',
-    padding: 14,
-    gap: 4,
-  },
-  tipTitle: {
-    color: colors.primaryDeep,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  tipBody: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
   },
   logoutPanel: {
     borderRadius: 24,

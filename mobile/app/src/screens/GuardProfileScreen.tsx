@@ -33,11 +33,6 @@ export function GuardProfileScreen() {
         <ProfileRow label="Login phone" value={session?.user.phone_number || 'Not available'} />
       </View>
 
-      <View style={styles.tipPanel}>
-        <Text style={styles.tipTitle}>Guard reminders</Text>
-        <Text style={styles.tipBody}>Keep the phone charged, network stable, and camera permission enabled for smooth gate operations.</Text>
-      </View>
-
       <View style={styles.logoutPanel}>
         <View style={styles.logoutCopy}>
           <Text style={styles.logoutTitle}>End duty session</Text>
@@ -135,24 +130,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     textAlign: 'right',
-  },
-  tipPanel: {
-    borderRadius: 24,
-    backgroundColor: '#eef4ff',
-    borderWidth: 1,
-    borderColor: '#cfe0ff',
-    padding: 18,
-    gap: 4,
-  },
-  tipTitle: {
-    color: colors.primaryDeep,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  tipBody: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
   },
   logoutPanel: {
     borderRadius: 24,

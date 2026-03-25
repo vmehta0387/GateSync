@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
 import { StatCard } from '../components/StatCard';
@@ -18,7 +18,6 @@ export function GuardHomeScreen({
   openIncidents,
   onStartShift,
   onEndShift,
-  onLogActivity,
 }: {
   activeShift: GuardShift | null;
   upcomingShift: GuardShift | null;
@@ -29,11 +28,8 @@ export function GuardHomeScreen({
   openIncidents: SecurityIncident[];
   onStartShift: () => Promise<void>;
   onEndShift: () => Promise<void>;
-  onLogActivity: (type: 'Patrol' | 'Mistake', note: string) => Promise<void>;
 }) {
   const { session, signOut } = useSession();
-  const [note, setNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [movementTab, setMovementTab] = useState<'today' | 'past'>('today');
   const guardName = session?.user.name?.trim() || `Guard #${session?.user.id ?? ''}`;
   const todayKey = useMemo(() => getDateKey(new Date().toISOString()), []);
@@ -65,13 +61,6 @@ export function GuardHomeScreen({
   );
 
   const visibleLogs = movementTab === 'today' ? todayLogs : pastLogs;
-
-  const submitActivity = async (type: 'Patrol' | 'Mistake') => {
-    setSubmitting(true);
-    await onLogActivity(type, note);
-    setNote('');
-    setSubmitting(false);
-  };
 
   const handleShiftAction = async () => {
     try {
@@ -119,37 +108,6 @@ export function GuardHomeScreen({
         <StatCard label="Awaiting arrival" value={approvedArrivalsCount} tone="primary" />
         <StatCard label="Inside campus" value={insideVisitorsCount} />
         <StatCard label="Open incidents" value={openIncidentsCount} />
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>Quick guard log</Text>
-        <Text style={styles.sectionSubtitle}>
-          Drop fast notes for patrol rounds, misses, or suspicious movement.
-        </Text>
-        <TextInput
-          multiline
-          value={note}
-          onChangeText={setNote}
-          placeholder="Checkpoint cleared, gate mismatch, vendor dispute..."
-          placeholderTextColor={colors.textMuted}
-          style={styles.textArea}
-        />
-        <View style={styles.buttonRow}>
-          <Pressable
-            onPress={() => void submitActivity('Patrol')}
-            disabled={submitting}
-            style={[styles.inlineButton, styles.successButton]}
-          >
-            <Text style={styles.inlineButtonText}>Log Patrol</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => void submitActivity('Mistake')}
-            disabled={submitting}
-            style={[styles.inlineButton, styles.warningButton]}
-          >
-            <Text style={styles.warningButtonText}>Log Mistake</Text>
-          </Pressable>
-        </View>
       </View>
 
       <View style={styles.panel}>
@@ -284,51 +242,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: colors.text,
     fontSize: 19,
-    fontWeight: '800',
-  },
-  sectionSubtitle: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  textArea: {
-    minHeight: 108,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    textAlignVertical: 'top',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 14,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  inlineButton: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  successButton: {
-    backgroundColor: colors.success,
-  },
-  warningButton: {
-    backgroundColor: '#fff5e7',
-    borderWidth: 1,
-    borderColor: '#f5c47b',
-  },
-  inlineButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  warningButtonText: {
-    color: colors.warning,
-    fontSize: 14,
     fontWeight: '800',
   },
   list: {

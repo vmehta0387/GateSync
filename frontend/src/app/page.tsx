@@ -135,10 +135,6 @@ export default function LoginPage() {
                     {loading ? 'Sending OTP...' : 'Continue Securely'}
                     {!loading && <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />}
                   </button>
-                  <p className="text-center text-xs text-white/40 mt-5 leading-relaxed">
-                    By confirming, you agree to our <a href="#" className="text-blue-300 hover:text-blue-200">Terms of Service</a> &amp; <a href="#" className="text-blue-300 hover:text-blue-200">Privacy Policy</a>.<br/>
-                    <span className="inline-block mt-2 px-2 py-1 bg-white/5 rounded-md border border-white/10">(Demo: &apos;9999999999&apos; Admin, &apos;8888888888&apos; Guard)</span>
-                  </p>
                 </form>
               </div>
 
@@ -146,8 +142,7 @@ export default function LoginPage() {
               <div className="w-1/2 shrink-0 pl-4">
                 <form onSubmit={handleVerifyOtp} className="space-y-6">
                   <div className="text-center mb-8">
-                    <p className="text-white/70 text-sm">Validating OTP sent to</p>
-                    <p className="text-white font-bold tracking-wider mt-1 text-lg">+91 {phoneNumber}</p>
+                    <p className="text-white font-bold tracking-wider text-lg">+91 {phoneNumber}</p>
                     <button type="button" onClick={() => setStep(1)} className="text-xs text-blue-300 hover:text-blue-200 font-medium underline mt-2 transition-colors">Change Number</button>
                   </div>
                   <div className="mb-6">
@@ -171,9 +166,6 @@ export default function LoginPage() {
                   >
                     {loading ? 'Verifying...' : 'Verify & Access'}
                   </button>
-                  <p className="text-center text-xs text-white/50 mt-6">
-                    Demo: Use OTP <span className="text-white font-bold">&apos;123456&apos;</span>
-                  </p>
                 </form>
               </div>
             </motion.div>
