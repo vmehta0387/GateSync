@@ -537,3 +537,28 @@ exports.removeResidentMapping = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Server error removing resident' });
     }
 };
+
+exports.deleteResident = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [users] = await db.query(
+            'SELECT id, role, society_id FROM users WHERE id = ? AND society_id = ? AND role = ? LIMIT 1',
+            [id, req.user.society_id, 'RESIDENT']
+        );
+
+        if (!users.length) {
+            return res.status(404).json({ success: false, message: 'Resident not found' });
+        }
+
+        await db.query('DELETE FROM family_members WHERE user_id = ?', [id]);
+        await db.query('DELETE FROM vehicles WHERE user_id = ?', [id]);
+        await db.query('DELETE FROM user_flats WHERE user_id = ?', [id]);
+        await db.query('DELETE FROM users WHERE id = ? AND society_id = ?', [id, req.user.society_id]);
+
+        return res.status(200).json({ success: true, message: 'Resident deleted successfully' });
+    } catch (error) {
+        console.error('deleteResident error:', error);
+        return res.status(500).json({ success: false, message: 'Server error deleting resident' });
+    }
+};

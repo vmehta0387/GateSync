@@ -384,14 +384,13 @@ export default function ResidentsPage() {
     }
   };
 
-  const removeResident = async (id: number, flat_id: number) => {
-    if (!confirm('Are you sure you want to remove this resident from this flat?')) return;
+  const deleteResident = async (id: number) => {
+    if (!confirm('Are you sure you want to permanently delete this resident account?')) return;
     try {
       const token = localStorage.getItem('gatepulse_token');
-      await fetch(`https://api.gatesync.in/api/v1/residents/${id}/remove`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ flat_id })
+      await fetch(`https://api.gatesync.in/api/v1/residents/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
       });
       fetchResidents();
     } catch (error) {
@@ -836,7 +835,7 @@ export default function ResidentsPage() {
                       <button title={resident.status === 'ACTIVE' ? 'Disable Access' : 'Activate Access'} onClick={() => toggleStatus(resident.id, resident.status)} className={`rounded-lg p-1.5 transition-colors ${resident.status === 'ACTIVE' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 dark:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20' : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20'}`}>
                         {resident.status === 'ACTIVE' ? <Ban className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
                       </button>
-                      <button disabled={!resident.flat_id} title={resident.flat_id ? 'Remove from Flat' : 'No flat mapping to remove'} onClick={() => resident.flat_id && removeResident(resident.id, resident.flat_id)} className="rounded-lg bg-red-50 p-1.5 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
+                      <button title="Delete Resident" onClick={() => deleteResident(resident.id)} className="rounded-lg bg-red-50 p-1.5 text-red-600 transition-colors hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>

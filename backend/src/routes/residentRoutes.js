@@ -15,5 +15,6 @@ router.get('/:id', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), residentControll
 router.post('/', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), residentController.addResident);
 router.put('/:id', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), residentController.updateResident);
 router.post('/:id/remove', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), residentController.removeResidentMapping);
+router.delete('/:id', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), residentController.deleteResident);
 
 module.exports = router;
