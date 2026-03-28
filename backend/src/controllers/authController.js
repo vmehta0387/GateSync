@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const { isExpoPushToken } = require('../services/pushNotificationService');
+const { sendSms } = require('../services/smsService');
+const { checkVerification, startVerification } = require('../services/twilioService');
 
 async function fetchUserWithSociety(userId) {
     const [users] = await db.query(`
@@ -13,7 +15,7 @@ async function fetchUserWithSociety(userId) {
     return users[0] || null;
 }
 
-// Mock OTP storage. In production, use Redis or DB with expiry.
+// Fallback OTP storage when Twilio Verify is not configured.
 const otpStore = new Map();
 
 exports.sendOtp = async (req, res) => {
@@ -39,16 +41,32 @@ exports.sendOtp = async (req, res) => {
             return res.status(403).json({ success: false, message: 'This account is inactive. Please contact your society admin.' });
         }
 
-        // Mock OTP generation: Always '123456' for testing, or random 6 digits
-        const otp = '123456'; // Math.floor(100000 + Math.random() * 900000).toString();
-        
-        otpStore.set(phone_number, otp);
+        let otpMessage = 'OTP sent successfully';
+        if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+            const verifyResult = await startVerification({ to: phone_number, channel: 'sms' });
+            if (!verifyResult.success) {
+                return res.status(500).json({ success: false, message: verifyResult.message || 'Unable to send OTP via Twilio Verify' });
+            }
+        } else {
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            otpStore.set(phone_number, otp);
+            const smsResult = await sendSms({
+                to: phone_number,
+                body: `GateSync OTP: ${otp}. It expires in 10 minutes. Do not share this code with anyone.`,
+            });
 
-        console.log(`[Mock SMS] Sent OTP ${otp} to ${phone_number}`);
+            if (!smsResult.success) {
+                return res.status(500).json({
+                    success: false,
+                    message: smsResult.error || smsResult.reason || 'Unable to send OTP via Twilio SMS',
+                });
+            }
+            otpMessage = 'OTP sent successfully';
+        }
 
         return res.status(200).json({
             success: true,
-            message: 'OTP sent successfully (Check server logs)'
+            message: otpMessage,
         });
     } catch (error) {
         console.error('sendOtp error:', error);
@@ -64,10 +82,13 @@ exports.verifyOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Phone number and OTP are required' });
         }
 
-        // Backdoor OTP for testing purposes
-        if (otp !== '123456') {
+        if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+            const verifyResult = await checkVerification({ to: phone_number, code: otp });
+            if (!verifyResult.success || !verifyResult.valid) {
+                return res.status(401).json({ success: false, message: verifyResult.message || 'Invalid or expired OTP' });
+            }
+        } else {
             const storedOtp = otpStore.get(phone_number);
-
             if (!storedOtp || storedOtp !== otp) {
                 return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
             }

@@ -34,6 +34,7 @@ export function GuardVisitorsScreen({
   onWalkInSubmit,
   onCheckOut,
   onApprovedCheckIn,
+  onCallResident,
   onStaffCheckIn,
   onStaffCheckOut,
 }: {
@@ -46,6 +47,7 @@ export function GuardVisitorsScreen({
   onWalkInSubmit: (payload: WalkInPayload) => Promise<void>;
   onCheckOut: (logId: number) => Promise<void>;
   onApprovedCheckIn: (logId: number) => Promise<void>;
+  onCallResident: (logId: number) => Promise<{ success: boolean; message?: string; twilio_number?: string }>;
   onStaffCheckIn: (staffId: number) => Promise<void>;
   onStaffCheckOut: (staffId: number) => Promise<void>;
 }) {
@@ -291,6 +293,24 @@ export function GuardVisitorsScreen({
     setBusy(false);
   };
 
+  const startResidentCall = async (logId: number) => {
+    setBusy(true);
+    const result = await onCallResident(logId);
+    setBusy(false);
+
+    if (!result.success) {
+      Alert.alert('Call unavailable', result.message || 'Unable to start the resident call right now.');
+      return;
+    }
+
+    Alert.alert(
+      'Calling resident',
+      result.twilio_number
+        ? `GateSync is connecting this call through ${result.twilio_number}. The resident's personal number stays hidden.`
+        : (result.message || 'GateSync is connecting the masked call now.'),
+    );
+  };
+
   const capturePhoto = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -523,6 +543,9 @@ export function GuardVisitorsScreen({
                 <Pressable style={[styles.submitButton, styles.successButton]} onPress={() => void onCheckOut(log.id)}>
                   <Text style={styles.submitButtonText}>Check Out</Text>
                 </Pressable>
+                <Pressable style={[styles.submitButton, styles.secondaryInlineButton]} onPress={() => void startResidentCall(log.id)} disabled={busy}>
+                  <Text style={styles.secondaryInlineButtonText}>Call Resident</Text>
+                </Pressable>
               </View>
             )) : (
               <EmptyState title="No visitors inside" detail="Checked-in visitors will show here with a direct checkout action." />
@@ -566,6 +589,11 @@ export function GuardVisitorsScreen({
                 <Text style={styles.itemMeta}>{log.purpose} / {log.passcode || log.vehicle_number || 'Walk-in visitor'}</Text>
                 <Text style={styles.itemMeta}>{formatDateTime(log.entry_time || log.expected_time || log.approval_requested_at)}</Text>
                 <View style={styles.actionRow}>
+                  {(log.status === 'Pending' || log.status === 'Approved' || log.status === 'CheckedIn') ? (
+                    <Pressable style={[styles.smallButton, styles.secondarySmall]} onPress={() => void startResidentCall(log.id)} disabled={busy}>
+                      <Text style={styles.smallButtonTextDark}>Call Resident</Text>
+                    </Pressable>
+                  ) : null}
                   {log.status === 'Approved' && (log.entry_method === 'PreApproved' || Boolean(log.passcode)) ? (
                     <Pressable style={[styles.smallButton, styles.primarySmall]} onPress={() => void onApprovedCheckIn(log.id)}>
                       <Text style={styles.smallButtonText}>Check In</Text>
@@ -742,6 +770,8 @@ const styles = StyleSheet.create({
   darkButton: { backgroundColor: colors.secondary },
   greenButton: { backgroundColor: colors.success },
   successButton: { backgroundColor: colors.success },
+  secondaryInlineButton: { backgroundColor: '#eef4ff', borderWidth: 1, borderColor: '#bfd3ff', marginTop: 10 },
+  secondaryInlineButtonText: { color: colors.primaryDeep, fontSize: 14, fontWeight: '800' },
   submitButtonText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   listCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 8 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
@@ -756,8 +786,10 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
   smallButton: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 },
   primarySmall: { backgroundColor: colors.primary },
+  secondarySmall: { backgroundColor: '#eef4ff', borderWidth: 1, borderColor: '#bfd3ff' },
   successSmall: { backgroundColor: colors.success },
   smallButtonText: { color: colors.white, fontSize: 13, fontWeight: '800' },
+  smallButtonTextDark: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
   loadMoreButton: { borderRadius: 16, borderWidth: 1, borderColor: '#bfd3ff', backgroundColor: '#eef4ff', alignItems: 'center', paddingVertical: 12 },
   loadMoreButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
 });

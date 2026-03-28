@@ -89,7 +89,10 @@ exports.sendSms = async ({ to, body }) => {
         };
     }
 
-    const provider = String(process.env.SMS_PROVIDER || 'mock').trim().toLowerCase();
+    const provider = String(
+        process.env.SMS_PROVIDER
+        || (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER ? 'twilio' : 'mock')
+    ).trim().toLowerCase();
 
     try {
         if (provider === 'twilio') {

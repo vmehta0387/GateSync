@@ -194,6 +194,24 @@ export async function checkOutVisitor(logId: number) {
   }
 }
 
+export async function callResidentForVisitor(logId: number) {
+  try {
+    const response = await api.post<{
+      success: boolean;
+      message?: string;
+      twilio_number?: string;
+    }>('/visitors/call-resident', {
+      log_id: logId,
+    });
+    return response.data;
+  } catch (error) {
+    return {
+      success: false,
+      message: getApiErrorMessage(error, 'Unable to start the masked resident call.'),
+    };
+  }
+}
+
 export async function createWalkInVisitor(payload: WalkInPayload) {
   try {
     const response = await api.post<{

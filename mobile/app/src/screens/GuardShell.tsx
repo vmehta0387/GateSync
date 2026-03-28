@@ -9,6 +9,7 @@ import {
   checkInApprovedVisitor,
   checkInWithPasscode,
   checkOutVisitor,
+  callResidentForVisitor,
   createIncident,
   createWalkInVisitor,
   endShift,
@@ -156,6 +157,7 @@ export function GuardShell() {
             onWalkInSubmit={(payload) => withReload(() => createWalkInVisitor(payload))}
             onCheckOut={(logId) => withReload(() => checkOutVisitor(logId))}
             onApprovedCheckIn={(logId) => withReload(() => checkInApprovedVisitor(logId))}
+            onCallResident={callResidentForVisitor}
             onStaffCheckIn={(staffId) => withReload(() => logStaffEntry(staffId))}
             onStaffCheckOut={(staffId) => withReload(() => logStaffExit(staffId))}
           />

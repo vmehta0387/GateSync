@@ -5,6 +5,7 @@ const { getIO } = require('../websocket/socket');
 const { sendBulkSms } = require('../services/smsService');
 const { sendPushToFlatResidents, sendPushToFlatApprovalResidents, sendPushToSocietyGuards } = require('../services/pushNotificationService');
 const { buildUploadPublicPath } = require('../config/uploads');
+const { createCall, normalizePhoneNumber } = require('../services/twilioService');
 
 const VISITOR_TYPES = ['Guest', 'Delivery', 'Cab', 'Service', 'Unknown'];
 const DEFAULT_RULES = {
@@ -18,6 +19,7 @@ const DEFAULT_RULES = {
 };
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+const API_PUBLIC_BASE_URL = process.env.API_PUBLIC_BASE_URL || process.env.API_BASE_URL || 'https://api.gatesync.in';
 
 const normalizeSettings = (rawSettings) => {
     if (!rawSettings) return {};
@@ -310,6 +312,21 @@ const getFlatApprovalResidentUserIds = async (flatId) => {
     );
 
     return rows.map((row) => row.id);
+};
+
+const getFlatPrimaryApprovalResidentContact = async (flatId) => {
+    const [rows] = await db.query(
+        `SELECT DISTINCT u.id, u.name, u.phone_number, COALESCE(uf.access_role, 'Primary') AS access_role
+         FROM user_flats uf
+         INNER JOIN users u ON u.id = uf.user_id
+         WHERE uf.flat_id = ? AND u.role = 'RESIDENT' AND u.status = 'ACTIVE'
+           AND COALESCE(u.can_approve_visitors, 1) = 1
+         ORDER BY CASE COALESCE(uf.access_role, 'Primary') WHEN 'Primary' THEN 0 ELSE 1 END, u.id ASC
+         LIMIT 1`,
+        [flatId]
+    );
+
+    return rows[0] || null;
 };
 
 const getFlatResidentNotificationTargets = async (flatId) => {
@@ -1089,6 +1106,95 @@ exports.denyVisitor = async (req, res) => {
         console.error('denyVisitor error:', error);
         return res.status(500).json({ success: false, message: 'Server error denying visitor' });
     }
+};
+
+exports.initiateMaskedResidentCall = async (req, res) => {
+    try {
+        const logId = Number(req.body.log_id || req.params.id);
+        if (!logId) {
+            return res.status(400).json({ success: false, message: 'Visitor log id is required' });
+        }
+
+        const twilioFromNumber = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER || '');
+        if (!twilioFromNumber) {
+            return res.status(400).json({ success: false, message: 'Twilio caller number is not configured' });
+        }
+
+        const guardPhone = normalizePhoneNumber(req.user.phone_number || '');
+        if (!guardPhone) {
+            return res.status(400).json({ success: false, message: 'Guard phone number is not available for masked calling' });
+        }
+
+        const [logs] = await db.query(
+            `SELECT vl.id, vl.flat_id, v.society_id, v.name AS visitor_name, f.block_name, f.flat_number
+             FROM visitor_logs vl
+             INNER JOIN visitors v ON v.id = vl.visitor_id
+             INNER JOIN flats f ON f.id = vl.flat_id
+             WHERE vl.id = ? AND v.society_id = ?`,
+            [logId, req.user.society_id]
+        );
+
+        const log = logs[0];
+        if (!log) {
+            return res.status(404).json({ success: false, message: 'Visitor log not found' });
+        }
+
+        const resident = await getFlatPrimaryApprovalResidentContact(log.flat_id);
+        if (!resident || !normalizePhoneNumber(resident.phone_number || '')) {
+            return res.status(404).json({ success: false, message: 'No callable resident found for this flat' });
+        }
+
+        const conferenceName = `gatepulse-${req.user.society_id}-${logId}-${Date.now()}`;
+        const baseBridgeUrl = `${API_PUBLIC_BASE_URL}/api/v1/visitors/masked-call/bridge`;
+        const guardBridgeUrl = `${baseBridgeUrl}?conference=${encodeURIComponent(conferenceName)}&role=guard&visitor=${encodeURIComponent(log.visitor_name || 'visitor')}&flat=${encodeURIComponent(`${log.block_name}-${log.flat_number}`)}`;
+        const residentBridgeUrl = `${baseBridgeUrl}?conference=${encodeURIComponent(conferenceName)}&role=resident&visitor=${encodeURIComponent(log.visitor_name || 'visitor')}&flat=${encodeURIComponent(`${log.block_name}-${log.flat_number}`)}`;
+
+        const [guardCall, residentCall] = await Promise.all([
+            createCall({ to: guardPhone, from: twilioFromNumber, url: guardBridgeUrl }),
+            createCall({ to: resident.phone_number, from: twilioFromNumber, url: residentBridgeUrl }),
+        ]);
+
+        if (!guardCall.success || !residentCall.success) {
+            return res.status(500).json({
+                success: false,
+                message: guardCall.message || residentCall.message || 'Unable to start masked call',
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Calling ${resident.name} through the GateSync Twilio line`,
+            twilio_number: twilioFromNumber,
+        });
+    } catch (error) {
+        console.error('initiateMaskedResidentCall error:', error);
+        return res.status(500).json({ success: false, message: 'Server error starting masked call' });
+    }
+};
+
+exports.maskedCallBridge = async (req, res) => {
+    const conference = String(req.query.conference || '').trim();
+    const role = String(req.query.role || 'participant').trim().toLowerCase();
+    const visitor = String(req.query.visitor || 'visitor').trim();
+    const flat = String(req.query.flat || 'the resident flat').trim();
+
+    if (!conference) {
+        return res.status(400).type('text/plain').send('Conference id is required');
+    }
+
+    const intro = role === 'guard'
+        ? `Connecting your GateSync call for ${visitor} at ${flat}.`
+        : `GateSync guard is calling regarding ${visitor} at ${flat}.`;
+
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">${intro}</Say>
+  <Dial callerId="${process.env.TWILIO_FROM_NUMBER}">
+    <Conference startConferenceOnEnter="true" endConferenceOnExit="true">${conference}</Conference>
+  </Dial>
+</Response>`;
+
+    return res.status(200).type('text/xml').send(twiml);
 };
 
 exports.checkInVisitor = async (req, res) => {

@@ -5,6 +5,7 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 const { uploadVisitorPhoto } = require('../middlewares/uploadMiddleware');
 
 router.post('/public-decision', visitorController.publicDecision);
+router.all('/masked-call/bridge', visitorController.maskedCallBridge);
 
 router.use(authenticate);
 
@@ -18,6 +19,7 @@ router.post('/pre-approve', authorize('RESIDENT', 'ADMIN', 'MANAGER'), visitorCo
 router.post('/walk-in', authorize('GUARD', 'ADMIN', 'MANAGER'), visitorController.createWalkInVisitor);
 router.post('/approve/:id', authorize('RESIDENT', 'ADMIN', 'SUPERADMIN', 'MANAGER'), visitorController.approveVisitor);
 router.post('/deny/:id', authorize('RESIDENT', 'ADMIN', 'SUPERADMIN', 'MANAGER'), visitorController.denyVisitor);
+router.post('/call-resident', authorize('GUARD', 'ADMIN', 'MANAGER'), visitorController.initiateMaskedResidentCall);
 
 // Only Guards (or Admins) can check-in/out
 router.post('/check-in', authorize('GUARD', 'ADMIN', 'MANAGER'), visitorController.checkInVisitor);
