@@ -30,7 +30,7 @@ export function ResidentShell() {
         {!activeAction && activeTab === 'home' ? (
           <ResidentHomeScreen onNavigate={handleTabChange} onOpenAction={setActiveAction} />
         ) : null}
-        {!activeAction && activeTab === 'visitors' ? <ResidentVisitorsScreen /> : null}
+        {!activeAction && activeTab === 'visitors' ? <ResidentVisitorsScreen onBack={() => handleTabChange('home')} /> : null}
         {!activeAction && activeTab === 'complaints' ? <ResidentComplaintsScreen /> : null}
         {!activeAction && activeTab === 'facilities' ? <ResidentFacilitiesScreen /> : null}
         {!activeAction && activeTab === 'profile' ? <ResidentProfileScreen /> : null}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
@@ -7,6 +7,7 @@ import { subscribeToResidentComplaintUpdates } from '../lib/socket';
 import { useSession } from '../providers/SessionProvider';
 import {
   addComplaintMessage,
+  closeComplaint,
   createComplaint,
   fetchComplaintCategories,
   fetchComplaintDetail,
@@ -36,6 +37,8 @@ export function ResidentComplaintsScreen() {
     attachments: [] as Array<{ file_name?: string; file_path: string; url?: string }>,
   });
   const [message, setMessage] = useState('');
+  const [closingReason, setClosingReason] = useState('');
+  const [selectedMessageEntry, setSelectedMessageEntry] = useState<ComplaintDetail['messages'][number] | null>(null);
 
   const loadBase = useCallback(async () => {
     setRefreshing(true);
@@ -105,6 +108,22 @@ export function ResidentComplaintsScreen() {
   }, [loadBase, loadDetail, selectedComplaintId, session?.user?.id]);
 
   const visibleComplaints = useMemo(() => complaints.slice(0, 20), [complaints]);
+
+  const closeSelectedComplaint = async () => {
+    if (!detail) {
+      return;
+    }
+
+    const response = await closeComplaint(detail.complaint.id, { note: closingReason.trim() || undefined });
+    if (!response.success) {
+      Alert.alert('Unable to close ticket', response.message || 'Please try again.');
+      return;
+    }
+
+    setClosingReason('');
+    await loadBase();
+    await loadDetail(detail.complaint.id);
+  };
 
   const attachImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -232,7 +251,10 @@ export function ResidentComplaintsScreen() {
                   <Text style={styles.cardTitle}>{complaint.ticket_id}</Text>
                   <Text style={styles.cardMeta}>{complaint.category_name} / {complaint.block_name}-{complaint.flat_number}</Text>
                 </View>
-                <Badge label={complaint.status} tone={complaint.is_overdue ? 'danger' : complaint.status === 'Resolved' || complaint.status === 'Closed' ? 'success' : 'info'} />
+                <View style={styles.badgeStack}>
+                  <Badge label={complaint.priority} tone={getPriorityTone(complaint.priority)} />
+                  <Badge label={complaint.status} tone={complaint.is_overdue ? 'danger' : complaint.status === 'Resolved' || complaint.status === 'Closed' ? 'success' : 'info'} />
+                </View>
               </View>
               <Text style={styles.helperText}>{complaint.description}</Text>
             </Pressable>
@@ -249,22 +271,33 @@ export function ResidentComplaintsScreen() {
                 <View style={styles.rowBetween}>
                   <View style={styles.cardCopy}>
                     <Text style={styles.cardTitle}>{detail.complaint.ticket_id}</Text>
-                    <Text style={styles.cardMeta}>{detail.complaint.category_name} / {detail.complaint.priority}</Text>
+                    <Text style={styles.cardMeta}>{detail.complaint.category_name}</Text>
                   </View>
-                  <Badge label={detail.complaint.status} tone={detail.complaint.is_overdue ? 'danger' : 'info'} />
+                  <View style={styles.badgeStack}>
+                    <Badge label={detail.complaint.priority} tone={getPriorityTone(detail.complaint.priority)} />
+                    <Badge label={detail.complaint.status} tone={detail.complaint.is_overdue ? 'danger' : 'info'} />
+                  </View>
                 </View>
                 <Text style={styles.helperText}>{detail.complaint.description}</Text>
                 <Text style={styles.helperText}>Assigned: {detail.assignees.length ? detail.assignees.map((item) => item.name).join(', ') : 'Awaiting assignment'}</Text>
                 <Text style={styles.helperText}>Recurring flat issues: {detail.recurring_count}</Text>
+                {!['Resolved', 'Closed'].includes(detail.complaint.status) ? (
+                  <>
+                    <TextInput value={closingReason} onChangeText={setClosingReason} placeholder="Optional reason before you close this ticket" placeholderTextColor={colors.textMuted} style={styles.input} />
+                    <Pressable onPress={() => void closeSelectedComplaint()} style={styles.closeButton}>
+                      <Text style={styles.closeButtonText}>Close Ticket</Text>
+                    </Pressable>
+                  </>
+                ) : null}
               </View>
 
               <Text style={styles.subheading}>Conversation</Text>
               {detail.messages.map((entry) => (
-                <View key={entry.id} style={styles.timelineCard}>
+                <Pressable key={entry.id} style={styles.timelineCard} onPress={() => setSelectedMessageEntry(entry)}>
                   <Text style={styles.cardTitle}>{entry.sender_name}</Text>
                   <Text style={styles.helperText}>{entry.message}</Text>
                   <Text style={styles.microText}>{formatDateTime(entry.created_at)}</Text>
-                </View>
+                </Pressable>
               ))}
 
               <TextInput value={message} onChangeText={setMessage} placeholder="Add follow-up message" placeholderTextColor={colors.textMuted} multiline style={styles.textArea} />
@@ -286,8 +319,33 @@ export function ResidentComplaintsScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={Boolean(selectedMessageEntry)} transparent animationType="slide" onRequestClose={() => setSelectedMessageEntry(null)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.cardCopy}>
+                <Text style={styles.modalTitle}>{selectedMessageEntry?.sender_name || 'Message detail'}</Text>
+                <Text style={styles.cardMeta}>{formatDateTime(selectedMessageEntry?.created_at || null)}</Text>
+              </View>
+              <Pressable onPress={() => setSelectedMessageEntry(null)} style={styles.dismissButton}>
+                <Text style={styles.dismissButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <Text style={styles.modalMessageText}>{selectedMessageEntry?.message || ''}</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
+}
+
+function getPriorityTone(priority: 'Low' | 'Medium' | 'High') {
+  if (priority === 'High') return 'danger';
+  if (priority === 'Medium') return 'warning';
+  return 'info';
 }
 
 const styles = StyleSheet.create({
@@ -325,15 +383,26 @@ const styles = StyleSheet.create({
   secondaryButton: { borderRadius: 16, borderWidth: 1, borderColor: '#bfd3ff', backgroundColor: '#eef4ff', alignItems: 'center', paddingVertical: 13 },
   secondaryButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
   disabledButton: { opacity: 0.55 },
+  input: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, color: colors.text, paddingHorizontal: 14, paddingVertical: 14, fontSize: 14 },
   ticketCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6, borderWidth: 1, borderColor: 'transparent' },
   ticketCardActive: { borderColor: '#bfd3ff', backgroundColor: '#eef4ff' },
   detailCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   timelineCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  badgeStack: { gap: 6, alignItems: 'flex-end' },
   cardCopy: { flex: 1, gap: 4 },
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
   cardMeta: { color: colors.textMuted, fontSize: 12 },
   helperText: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   microText: { color: colors.textMuted, fontSize: 11 },
   subheading: { color: colors.text, fontSize: 15, fontWeight: '800', marginTop: 4 },
+  closeButton: { borderRadius: 14, backgroundColor: '#fff1f1', borderWidth: 1, borderColor: '#efc6c6', alignItems: 'center', paddingVertical: 12 },
+  closeButtonText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
+  modalScrim: { flex: 1, backgroundColor: 'rgba(10, 20, 35, 0.45)', justifyContent: 'flex-end' },
+  modalCard: { maxHeight: '72%', borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: colors.surface, padding: 18, gap: 12 },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },
+  modalBody: { paddingBottom: 18 },
+  modalMessageText: { color: colors.text, fontSize: 14, lineHeight: 22 },
+  dismissButton: { borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8 },
+  dismissButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
 });

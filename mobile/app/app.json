@@ -15,7 +15,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.gatesync.mobile"
     },
-      "android": {
+    "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1e3a8a"
@@ -33,7 +33,14 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1ea7ff",
+          "defaultChannel": "default"
+        }
+      ],
       [
         "expo-camera",
         {
@@ -54,11 +61,18 @@
         }
       ],
       [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow GateSync to pick visitor details from your phone contacts."
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow GateSync to use Face ID to unlock your session on this device."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "apiBaseUrl": "https://api.gatesync.in",

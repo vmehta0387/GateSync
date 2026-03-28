@@ -14,6 +14,10 @@ frontend/.env
 mobile/app/.env
 mobile/guard-app/.env
 mobile/resident-app/.env
+firebase-service-account*.json
+service-account*.json
+google-service*.json
+*firebase-adminsdk*.json
 
 # logs
 *.log

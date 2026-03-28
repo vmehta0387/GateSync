@@ -1,6 +1,7 @@
 const path = require('path');
 const db = require('../config/db');
 const { buildUploadPublicPath } = require('../config/uploads');
+const { sendPushToUsers } = require('../services/pushNotificationService');
 
 const NOTICE_TYPES = ['General', 'Urgent', 'Event', 'Maintenance', 'Emergency'];
 const AUDIENCE_TYPES = ['AllResidents', 'Tower', 'flats', 'Occupancy', 'Defaulters', 'Committee', 'Guards', 'CustomUsers'];
@@ -134,6 +135,18 @@ const mapDocumentRow = (row) => ({
     created_at: formatDateTime(row.created_at),
     created_by_name: row.created_by_name || 'Admin',
 });
+
+const sendCommunicationPushSafely = async ({ userIds = [], title, body, data = {} }) => {
+    if (!Array.isArray(userIds) || !userIds.length) {
+        return;
+    }
+
+    try {
+        await sendPushToUsers({ userIds, title, body, data });
+    } catch (error) {
+        console.warn('Communication push skipped:', error.message);
+    }
+};
 
 const getAudienceQuery = ({ societyId, audienceType, filters = {} }) => {
     const params = [societyId];
@@ -401,6 +414,13 @@ exports.sendMessage = async (req, res) => {
             [req.user.society_id, req.user.id, receiverId, subject, content, priority, JSON.stringify(attachments)]
         );
 
+        await sendCommunicationPushSafely({
+            userIds: [receiverId],
+            title: subject || 'New message from admin',
+            body: content,
+            data: { type: 'direct_message', priority },
+        });
+
         return res.status(201).json({ success: true, message: 'Direct message sent successfully' });
     } catch (error) {
         console.error('sendMessage error:', error);
@@ -452,6 +472,15 @@ exports.sendBroadcast = async (req, res) => {
                 status,
             ]
         );
+
+        if (status === 'Published') {
+            await sendCommunicationPushSafely({
+                userIds: recipients.map((user) => user.id),
+                title: noticeType === 'Emergency' ? 'Emergency notice' : title,
+                body,
+                data: { type: 'notice', notice_id: result.insertId, notice_type: noticeType },
+            });
+        }
 
         return res.status(201).json({
             success: true,
@@ -522,6 +551,13 @@ exports.sendEmergencyAlert = async (req, res) => {
                 [values]
             );
         }
+
+        await sendCommunicationPushSafely({
+            userIds: recipients.map((user) => user.id),
+            title: 'Emergency alert',
+            body: content,
+            data: { type: 'emergency_notice' },
+        });
 
         await db.query(
             `INSERT INTO notices (

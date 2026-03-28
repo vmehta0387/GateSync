@@ -1,5 +1,6 @@
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
 import { subscribeToResidentFacilityUpdates } from '../lib/socket';
@@ -34,6 +35,8 @@ export function ResidentFacilitiesScreen() {
   });
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
   const [bookingForm, setBookingForm] = useState(initialBookingForm);
+  const [showBookingDatePicker, setShowBookingDatePicker] = useState(false);
+  const [showBookingTimePicker, setShowBookingTimePicker] = useState(false);
 
   const loadBase = useCallback(async () => {
     setRefreshing(true);
@@ -85,6 +88,42 @@ export function ResidentFacilitiesScreen() {
   }, [loadAvailability, loadBase, selectedFacilityId, session?.user?.id, session?.user?.society_id]);
 
   const selectedFacility = useMemo(() => facilities.find((facility) => facility.id === selectedFacilityId) || null, [facilities, selectedFacilityId]);
+  const selectedBookingDateTime = useMemo(() => {
+    if (bookingForm.booking_date && bookingForm.start_time) {
+      return new Date(`${bookingForm.booking_date}T${bookingForm.start_time}`);
+    }
+
+    const fallback = new Date();
+    fallback.setHours(fallback.getHours() + 1, 0, 0, 0);
+    return fallback;
+  }, [bookingForm.booking_date, bookingForm.start_time]);
+
+  const bookingSelectionLabel = useMemo(() => {
+    if (!bookingForm.booking_date || !bookingForm.start_time) {
+      return 'Pick a date and start time for the booking.';
+    }
+
+    return `${bookingForm.booking_date} at ${bookingForm.start_time}`;
+  }, [bookingForm.booking_date, bookingForm.start_time]);
+
+  const handleBookingDateChange = (_event: DateTimePickerEvent, date?: Date) => {
+    setShowBookingDatePicker(Platform.OS === 'ios');
+    if (!date) return;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    setBookingForm((current) => ({ ...current, booking_date: `${year}-${month}-${day}` }));
+  };
+
+  const handleBookingTimeChange = (_event: DateTimePickerEvent, date?: Date) => {
+    setShowBookingTimePicker(Platform.OS === 'ios');
+    if (!date) return;
+
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    setBookingForm((current) => ({ ...current, start_time: `${hours}:${minutes}` }));
+  };
 
   const submitBooking = async () => {
     if (!selectedFacility || !bookingForm.booking_date || !bookingForm.start_time) {
@@ -153,8 +192,17 @@ export function ResidentFacilitiesScreen() {
           {selectedFacility ? (
             <>
               <Text style={styles.helperText}>{selectedFacility.name} / Max {selectedFacility.max_booking_hours}h / Advance {selectedFacility.advance_booking_days} day(s)</Text>
-              <TextInput value={bookingForm.booking_date} onChangeText={(value) => setBookingForm((current) => ({ ...current, booking_date: value }))} placeholder="Date (YYYY-MM-DD)" placeholderTextColor={colors.textMuted} style={styles.input} />
-              <TextInput value={bookingForm.start_time} onChangeText={(value) => setBookingForm((current) => ({ ...current, start_time: value }))} placeholder="Start time (HH:MM)" placeholderTextColor={colors.textMuted} style={styles.input} />
+              <View style={styles.pickerPanel}>
+                <Text style={styles.helperText}>{bookingSelectionLabel}</Text>
+                <View style={styles.formRow}>
+                  <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowBookingDatePicker(true)}>
+                    <Text style={styles.secondaryButtonText}>Pick date</Text>
+                  </Pressable>
+                  <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowBookingTimePicker(true)}>
+                    <Text style={styles.secondaryButtonText}>Pick time</Text>
+                  </Pressable>
+                </View>
+              </View>
               <View style={styles.formRow}>
                 <TextInput value={bookingForm.duration_hours} onChangeText={(value) => setBookingForm((current) => ({ ...current, duration_hours: value.replace(/\D/g, '') || '1' }))} placeholder="Hours" placeholderTextColor={colors.textMuted} keyboardType="number-pad" style={[styles.input, styles.rowInput]} />
                 <TextInput value={bookingForm.guest_count} onChangeText={(value) => setBookingForm((current) => ({ ...current, guest_count: value.replace(/\D/g, '') || '1' }))} placeholder="Guests" placeholderTextColor={colors.textMuted} keyboardType="number-pad" style={[styles.input, styles.rowInput]} />
@@ -215,6 +263,21 @@ export function ResidentFacilitiesScreen() {
           )}
         </View>
       </ScrollView>
+      {showBookingDatePicker ? (
+        <DateTimePicker
+          mode="date"
+          value={selectedBookingDateTime}
+          onChange={handleBookingDateChange}
+          minimumDate={new Date()}
+        />
+      ) : null}
+      {showBookingTimePicker ? (
+        <DateTimePicker
+          mode="time"
+          value={selectedBookingDateTime}
+          onChange={handleBookingTimeChange}
+        />
+      ) : null}
     </View>
   );
 }
@@ -233,6 +296,7 @@ const styles = StyleSheet.create({
   input: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, color: colors.text, paddingHorizontal: 14, paddingVertical: 14, fontSize: 14 },
   formRow: { flexDirection: 'row', gap: 10 },
   rowInput: { flex: 1 },
+  pickerPanel: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, padding: 14, gap: 10 },
   textArea: {
     minHeight: 90,
     borderRadius: 16,

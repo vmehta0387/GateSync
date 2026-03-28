@@ -12,10 +12,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-community/datetimepicker": "8.4.4",
     "axios": "^1.13.6",
     "expo": "~54.0.33",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",
+    "expo-contacts": "~15.0.11",
     "expo-dev-client": "~6.0.20",
     "expo-device": "~8.0.10",
     "expo-image-picker": "~17.0.10",

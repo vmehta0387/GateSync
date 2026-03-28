@@ -165,6 +165,15 @@ export async function addComplaintMessage(
   }
 }
 
+export async function closeComplaint(complaintId: number, payload?: { note?: string }) {
+  try {
+    const response = await api.post<BasicResponse>(`/complaints/${complaintId}/close`, payload || {});
+    return response.data;
+  } catch (error) {
+    return { success: false, message: getApiErrorMessage(error, 'Unable to close this ticket.') };
+  }
+}
+
 export async function uploadComplaintAttachment(file: { uri: string; name?: string; type?: string }) {
   try {
     const formData = buildSingleFileFormData('file', file, `complaint-${Date.now()}.jpg`);

@@ -847,6 +847,9 @@ exports.preApproveVisitor = async (req, res) => {
         }
 
         const now = new Date();
+        const expectedTime = validation.value.expected_time
+            ? validation.value.expected_time
+            : new Date(now.getTime() + (24 * 60 * 60 * 1000));
         const [logResult] = await db.query(
             `INSERT INTO visitor_logs (
                 visitor_id, flat_id, status, purpose, expected_time, approval_type, entry_method,
@@ -857,7 +860,7 @@ exports.preApproveVisitor = async (req, res) => {
                 visitorInfo.visitorId,
                 flatId,
                 validation.value.purpose,
-                validation.value.expected_time,
+                expectedTime,
                 validation.value.delivery_company,
                 validation.value.vehicle_number,
                 validation.value.visitor_photo_url,

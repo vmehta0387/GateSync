@@ -13,6 +13,7 @@ import { FlatOption, StaffMember, VisitorLog, WalkInPayload } from '../types/gua
 import { formatDateTime, formatDayLabel, getDateKey, toValidDate } from '../utils/format';
 
 const visitorTypes: Array<WalkInPayload['purpose']> = ['Guest', 'Delivery', 'Cab', 'Service', 'Unknown'];
+const getVisitorTypeLabel = (value: WalkInPayload['purpose']) => value === 'Unknown' ? 'Other' : value;
 const initialWalkIn: WalkInPayload = {
   name: '',
   phone_number: '',
@@ -414,7 +415,7 @@ export function GuardVisitorsScreen({
                   }}
                   style={[styles.typeChip, walkIn.purpose === type ? styles.typeChipActive : null]}
                 >
-                  <Text style={[styles.typeChipText, walkIn.purpose === type ? styles.typeChipTextActive : null]}>{type}</Text>
+                  <Text style={[styles.typeChipText, walkIn.purpose === type ? styles.typeChipTextActive : null]}>{getVisitorTypeLabel(type)}</Text>
                 </Pressable>
               ))}
             </View>

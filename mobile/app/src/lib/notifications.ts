@@ -75,15 +75,15 @@ async function ensureNotificationCategories() {
         identifier: APPROVE_VISITOR_ACTION_ID,
         buttonTitle: 'Approve',
         options: {
-          opensAppToForeground: false,
+          opensAppToForeground: true,
         },
       },
       {
         identifier: DENY_VISITOR_ACTION_ID,
-        buttonTitle: 'Deny',
+        buttonTitle: 'Reject',
         options: {
           isDestructive: true,
-          opensAppToForeground: false,
+          opensAppToForeground: true,
         },
       },
     ],

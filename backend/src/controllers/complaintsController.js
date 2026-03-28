@@ -2,6 +2,7 @@ const path = require('path');
 const db = require('../config/db');
 const { buildUploadPublicPath } = require('../config/uploads');
 const { getIO } = require('../websocket/socket');
+const { sendPushToUsers } = require('../services/pushNotificationService');
 
 const DEFAULT_CATEGORIES = [
     { name: 'Plumbing', description: 'Water leakage, pipe issues, or drainage problems.', default_priority: 'High', sla_hours: 24 },
@@ -64,6 +65,23 @@ const buildComplaintRooms = ({ societyId, flatId, residentUserId }) => [
     `flat_${flatId}`,
     residentUserId ? `resident_${residentUserId}` : null,
 ].filter(Boolean);
+
+const notifyComplaintPush = async ({ userIds = [], title, body, data = {} }) => {
+    if (!Array.isArray(userIds) || !userIds.length) {
+        return;
+    }
+
+    try {
+        await sendPushToUsers({
+            userIds,
+            title,
+            body,
+            data,
+        });
+    } catch (error) {
+        console.warn('Complaint push skipped:', error.message);
+    }
+};
 
 const ensureDefaultCategories = async (societyId) => {
     const values = DEFAULT_CATEGORIES.map((category) => [
@@ -583,6 +601,15 @@ exports.updateComplaint = async (req, res) => {
             { complaint_id: complaintId, status, priority }
         );
 
+        if (complaint.created_by_user_id && complaint.created_by_user_id !== req.user.id) {
+            await notifyComplaintPush({
+                userIds: [complaint.created_by_user_id],
+                title: `Ticket ${complaint.ticket_id} updated`,
+                body: resolutionNote || `Status changed to ${status}.`,
+                data: { type: 'complaint_updated', complaint_id: complaintId, status, priority },
+            });
+        }
+
         return res.status(200).json({ success: true, message: 'Complaint updated successfully' });
     } catch (error) {
         console.error('updateComplaint error:', error);
@@ -685,6 +712,15 @@ exports.addComplaintMessage = async (req, res) => {
             { complaint_id: complaintId }
         );
 
+        if (complaint.created_by_user_id && complaint.created_by_user_id !== req.user.id) {
+            await notifyComplaintPush({
+                userIds: [complaint.created_by_user_id],
+                title: `New update on ${complaint.ticket_id}`,
+                body: message,
+                data: { type: 'complaint_message_added', complaint_id: complaintId },
+            });
+        }
+
         return res.status(201).json({ success: true, message: 'Complaint update posted successfully' });
     } catch (error) {
         console.error('addComplaintMessage error:', error);
@@ -764,4 +800,50 @@ exports.uploadAttachment = async (req, res) => {
         success: true,
         file: buildUploadedFilePayload(req, req.file),
     });
+};
+
+exports.closeComplaintByResident = async (req, res) => {
+    try {
+        const complaintId = Number(req.params.id);
+        if (!complaintId) {
+            return res.status(400).json({ success: false, message: 'Complaint id is required' });
+        }
+
+        const complaint = await getComplaintBase(complaintId, req.user.society_id);
+        if (!complaint) {
+            return res.status(404).json({ success: false, message: 'Complaint not found' });
+        }
+        if (complaint.created_by_user_id !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'You can only close your own ticket' });
+        }
+        if (['Resolved', 'Closed'].includes(complaint.status)) {
+            return res.status(400).json({ success: false, message: 'This ticket is already closed' });
+        }
+
+        const note = normalizeOptionalString(req.body.note) || 'Ticket closed by resident';
+
+        await db.query(
+            `UPDATE complaints
+             SET status = 'Closed', closed_at = NOW(), updated_at = NOW()
+             WHERE id = ? AND society_id = ?`,
+            [complaintId, req.user.society_id]
+        );
+
+        await db.query(
+            `INSERT INTO complaint_status_history (complaint_id, status, note, changed_by_user_id)
+             VALUES (?, 'Closed', ?, ?)`,
+            [complaintId, note, req.user.id]
+        );
+
+        emitToRooms(
+            buildComplaintRooms({ societyId: req.user.society_id, flatId: complaint.flat_id, residentUserId: complaint.created_by_user_id }),
+            'complaint_updated',
+            { complaint_id: complaintId, status: 'Closed', priority: complaint.priority }
+        );
+
+        return res.status(200).json({ success: true, message: 'Ticket closed successfully' });
+    } catch (error) {
+        console.error('closeComplaintByResident error:', error);
+        return res.status(500).json({ success: false, message: 'Server error closing complaint' });
+    }
 };

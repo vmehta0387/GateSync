@@ -1,14 +1,15 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme';
 
 export type ResidentTab = 'home' | 'visitors' | 'complaints' | 'facilities' | 'profile';
 
-const ITEMS: Array<{ key: ResidentTab; label: string; icon: string }> = [
-  { key: 'home', label: 'Home', icon: 'H' },
-  { key: 'visitors', label: 'Visitors', icon: 'V' },
-  { key: 'complaints', label: 'Helpdesk', icon: 'C' },
-  { key: 'facilities', label: 'Facilities', icon: 'F' },
-  { key: 'profile', label: 'Profile', icon: 'P' },
+const ITEMS: Array<{ key: ResidentTab; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = [
+  { key: 'home', label: 'Home', icon: 'home-variant-outline' },
+  { key: 'visitors', label: 'Visitors', icon: 'account-group-outline' },
+  { key: 'complaints', label: 'Helpdesk', icon: 'lifebuoy' },
+  { key: 'facilities', label: 'Facilities', icon: 'calendar-month-outline' },
+  { key: 'profile', label: 'Profile', icon: 'account-circle-outline' },
 ];
 
 export function TabBar({ activeTab, onChange }: { activeTab: ResidentTab; onChange: (tab: ResidentTab) => void }) {
@@ -19,7 +20,11 @@ export function TabBar({ activeTab, onChange }: { activeTab: ResidentTab; onChan
         return (
           <Pressable key={item.key} onPress={() => onChange(item.key)} style={[styles.tab, active ? styles.activeTab : null]}>
             <View style={[styles.iconBox, active ? styles.activeIconBox : null]}>
-              <Text style={[styles.iconText, active ? styles.activeIconText : null]}>{item.icon}</Text>
+              <MaterialCommunityIcons
+                name={item.icon}
+                size={18}
+                color={active ? colors.secondary : '#c7d2e5'}
+              />
             </View>
             <Text numberOfLines={1} style={[styles.label, active ? styles.activeLabel : null]}>{item.label}</Text>
           </Pressable>
@@ -57,14 +62,6 @@ const styles = StyleSheet.create({
   },
   activeIconBox: {
     backgroundColor: colors.white,
-  },
-  iconText: {
-    color: '#c7d2e5',
-    fontWeight: '900',
-    fontSize: 13,
-  },
-  activeIconText: {
-    color: colors.secondary,
   },
   label: {
     color: '#c7d2e5',

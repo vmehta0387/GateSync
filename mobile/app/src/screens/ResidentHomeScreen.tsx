@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Badge } from '../components/Badge';
@@ -20,7 +21,7 @@ import { formatDateTime } from '../utils/format';
 
 type HomeAction = {
   code: string;
-  icon: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   helper: string;
   tab?: ResidentTab;
@@ -100,21 +101,21 @@ export function ResidentHomeScreen({
   }, [session?.user?.name]);
 
   const quickCategories: HomeAction[] = [
-    { code: 'visitors', icon: '👥', label: 'Visitors', helper: 'Entry and approvals', tab: 'visitors', tone: 'primary' },
-    { code: 'bills', icon: '🧾', label: 'Bills', helper: `${unpaidInvoices.length} unpaid`, actionRoute: 'bills' },
-    { code: 'society', icon: '🏢', label: 'Society', helper: `${committees.length} public groups`, actionRoute: 'society' },
-    { code: 'helpdesk', icon: '🛠', label: 'Helpdesk', helper: `${openComplaints.length} open`, tab: 'complaints' },
+    { code: 'visitors', icon: 'account-group-outline', label: 'Visitors', helper: 'Entry and approvals', tab: 'visitors', tone: 'primary' },
+    { code: 'bills', icon: 'file-document-outline', label: 'Bills', helper: `${unpaidInvoices.length} unpaid`, actionRoute: 'bills' },
+    { code: 'society', icon: 'office-building-outline', label: 'Society', helper: `${committees.length} public groups`, actionRoute: 'society' },
+    { code: 'helpdesk', icon: 'lifebuoy', label: 'Helpdesk', helper: `${openComplaints.length} open`, tab: 'complaints' },
   ];
 
   const mainActions: HomeAction[] = [
-    { code: 'visit-pass', icon: '🎟', label: 'Visit Pass', helper: 'Create entry pass', tab: 'visitors', tone: 'primary' },
-    { code: 'approve-entry', icon: '✅', label: 'Approve Entry', helper: 'Gate requests', tab: 'visitors', badge: pendingApprovals.length ? String(pendingApprovals.length) : '' },
-    { code: 'amenities', icon: '🏊', label: 'Amenities', helper: 'Book facilities', tab: 'facilities' },
-    { code: 'complaints', icon: '📣', label: 'Complaints', helper: 'Raise issue', tab: 'complaints' },
-    { code: 'notices', icon: '📢', label: 'Notices', helper: 'Society updates', actionRoute: 'notices' },
-    { code: 'my-flat', icon: '🏠', label: 'My Flat', helper: flats[0] ? `${flats[0].block_name}-${flats[0].flat_number}` : 'Apartment info', actionRoute: 'myFlat' },
-    { code: 'staff', icon: '🧹', label: 'Staff', helper: 'Household staff', actionRoute: 'staff' },
-    { code: 'documents', icon: '📂', label: 'Documents', helper: 'Rules and files', actionRoute: 'documents' },
+    { code: 'visit-pass', icon: 'ticket-confirmation-outline', label: 'Visit Pass', helper: 'Create entry pass', tab: 'visitors', tone: 'primary' },
+    { code: 'approve-entry', icon: 'check-decagram-outline', label: 'Approve Entry', helper: 'Gate requests', tab: 'visitors', badge: pendingApprovals.length ? String(pendingApprovals.length) : '' },
+    { code: 'amenities', icon: 'pool', label: 'Amenities', helper: 'Book facilities', tab: 'facilities' },
+    { code: 'complaints', icon: 'clipboard-alert-outline', label: 'Complaints', helper: 'Raise issue', tab: 'complaints' },
+    { code: 'notices', icon: 'bullhorn-outline', label: 'Notices', helper: 'Society updates', actionRoute: 'notices' },
+    { code: 'my-flat', icon: 'home-city-outline', label: 'My Flat', helper: flats[0] ? `${flats[0].block_name}-${flats[0].flat_number}` : 'Apartment info', actionRoute: 'myFlat' },
+    { code: 'staff', icon: 'toolbox-outline', label: 'Staff', helper: 'Household staff', actionRoute: 'staff' },
+    { code: 'documents', icon: 'folder-outline', label: 'Documents', helper: 'Rules and files', actionRoute: 'documents' },
   ];
 
   const handleAction = (action: HomeAction) => {
@@ -160,7 +161,11 @@ export function ResidentHomeScreen({
           {quickCategories.map((item) => (
             <Pressable key={item.code} onPress={() => handleAction(item)} style={[styles.categoryCard, item.tone === 'primary' ? styles.categoryCardPrimary : null]}>
               <View style={[styles.categoryIcon, item.tone === 'primary' ? styles.categoryIconPrimary : null]}>
-                    <Text style={[styles.categoryIconText, item.tone === 'primary' ? styles.categoryIconTextPrimary : null]}>{item.icon}</Text>
+                <MaterialCommunityIcons
+                  name={item.icon}
+                  size={20}
+                  color={item.tone === 'primary' ? colors.white : colors.primaryDeep}
+                />
               </View>
               <Text style={[styles.categoryTitle, item.tone === 'primary' ? styles.categoryTitlePrimary : null]}>{item.label}</Text>
               <Text style={[styles.categoryHelper, item.tone === 'primary' ? styles.categoryHelperPrimary : null]}>{item.helper}</Text>
@@ -175,7 +180,11 @@ export function ResidentHomeScreen({
               <Pressable key={action.code} onPress={() => handleAction(action)} style={[styles.actionCard, action.tone === 'primary' ? styles.actionCardPrimary : null]}>
                 <View style={styles.actionTopRow}>
                   <View style={[styles.actionIcon, action.tone === 'primary' ? styles.actionIconPrimary : null]}>
-                    <Text style={[styles.actionIconText, action.tone === 'primary' ? styles.actionIconTextPrimary : null]}>{action.icon}</Text>
+                    <MaterialCommunityIcons
+                      name={action.icon}
+                      size={20}
+                      color={action.tone === 'primary' ? colors.white : colors.primaryDeep}
+                    />
                   </View>
                   {action.badge ? (
                     <View style={styles.actionBadge}>
@@ -195,29 +204,6 @@ export function ResidentHomeScreen({
           <StatusCard label="Upcoming visitors" value={upcomingVisitors.length} helper="Pre-approved passes" tone="primary" />
           <StatusCard label="Pending dues" value={`Rs ${unpaidTotal.toFixed(0)}`} helper={`${unpaidInvoices.length} unpaid invoice(s)`} tone="danger" />
           <StatusCard label="Open complaints" value={openComplaints.length} helper="Issues still being resolved" tone="neutral" />
-        </View>
-
-        <View style={styles.mainPanel}>
-          <Text style={styles.panelTitle}>Operational updates</Text>
-          <View style={styles.dualColumn}>
-            <View style={styles.infoColumn}>
-              <Text style={styles.infoTitle}>Pending approvals</Text>
-              {pendingApprovals.length ? pendingApprovals.slice(0, 3).map((log) => (
-                <InfoRow key={log.id} title={log.visitor_name} detail={`${log.purpose} / ${log.block_name}-${log.flat_number}`} meta={formatDateTime(log.approval_requested_at || null)} badgeLabel="Pending" badgeTone="warning" />
-              )) : (
-                <EmptyState title="No approvals waiting" detail="Guard requests needing your approval will appear here." />
-              )}
-            </View>
-
-            <View style={styles.infoColumn}>
-              <Text style={styles.infoTitle}>Upcoming visitors</Text>
-              {upcomingVisitors.length ? upcomingVisitors.slice(0, 3).map((log) => (
-                <InfoRow key={log.id} title={log.visitor_name} detail={`${log.purpose} / ${log.block_name}-${log.flat_number}`} meta={log.passcode || 'Approved'} badgeLabel="Pass ready" badgeTone="info" />
-              )) : (
-                <EmptyState title="No upcoming visitors" detail="Generated gate passes will be listed here." />
-              )}
-            </View>
-          </View>
         </View>
 
         <View style={styles.mainPanel}>
@@ -283,6 +269,29 @@ export function ResidentHomeScreen({
           )) : (
             <EmptyState title="No visitors inside" detail="Live gate check-ins will appear here once a visitor is marked inside." />
           )}
+        </View>
+
+        <View style={styles.mainPanel}>
+          <Text style={styles.panelTitle}>Operational updates</Text>
+          <View style={styles.dualColumn}>
+            <View style={styles.infoColumn}>
+              <Text style={styles.infoTitle}>Pending approvals</Text>
+              {pendingApprovals.length ? pendingApprovals.slice(0, 3).map((log) => (
+                <InfoRow key={log.id} title={log.visitor_name} detail={`${log.purpose} / ${log.block_name}-${log.flat_number}`} meta={formatDateTime(log.approval_requested_at || null)} badgeLabel="Pending" badgeTone="warning" />
+              )) : (
+                <EmptyState title="No approvals waiting" detail="Guard requests needing your approval will appear here." />
+              )}
+            </View>
+
+            <View style={styles.infoColumn}>
+              <Text style={styles.infoTitle}>Upcoming visitors</Text>
+              {upcomingVisitors.length ? upcomingVisitors.slice(0, 3).map((log) => (
+                <InfoRow key={log.id} title={log.visitor_name} detail={`${log.purpose} / ${log.block_name}-${log.flat_number}`} meta={log.passcode || 'Approved'} badgeLabel="Pass ready" badgeTone="info" />
+              )) : (
+                <EmptyState title="No upcoming visitors" detail="Generated gate passes will be listed here." />
+              )}
+            </View>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -434,13 +443,6 @@ const styles = StyleSheet.create({
   categoryIconPrimary: {
     backgroundColor: colors.primary,
   },
-  categoryIconText: {
-    color: colors.primaryDeep,
-    fontSize: 20,
-  },
-  categoryIconTextPrimary: {
-    color: colors.white,
-  },
   categoryTitle: {
     color: colors.text,
     fontSize: 18,
@@ -500,13 +502,6 @@ const styles = StyleSheet.create({
   },
   actionIconPrimary: {
     backgroundColor: colors.primary,
-  },
-  actionIconText: {
-    color: colors.primaryDeep,
-    fontSize: 20,
-  },
-  actionIconTextPrimary: {
-    color: colors.white,
   },
   actionBadge: {
     minWidth: 24,

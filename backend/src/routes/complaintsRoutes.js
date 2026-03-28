@@ -16,5 +16,6 @@ router.get('/:id', complaintsController.getComplaintDetail);
 router.put('/:id', authorize('ADMIN', 'MANAGER'), complaintsController.updateComplaint);
 router.post('/:id/assign', authorize('ADMIN', 'MANAGER'), complaintsController.assignComplaint);
 router.post('/:id/messages', authorize('RESIDENT', 'ADMIN', 'MANAGER'), complaintsController.addComplaintMessage);
+router.post('/:id/close', authorize('RESIDENT'), complaintsController.closeComplaintByResident);
 
 module.exports = router;

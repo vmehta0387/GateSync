@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
+  Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -91,6 +93,7 @@ export function ResidentUtilityScreen({
   const [message, setMessage] = useState('');
   const [invoiceFilter, setInvoiceFilter] = useState<'All' | Invoice['status']>('All');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
+  const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
 
   const getFailureMessage = (...responses: unknown[]) => {
     for (const response of responses) {
@@ -330,7 +333,7 @@ export function ResidentUtilityScreen({
                   <View style={styles.actionRow}>
                     {selectedInvoice.pdf_url ? (
                       <Pressable style={styles.secondaryButton} onPress={() => void openLink(selectedInvoice.pdf_url || '', selectedInvoice.invoice_number || 'Invoice PDF')}>
-                        <Text style={styles.secondaryButtonText}>Open invoice</Text>
+                        <Text style={styles.secondaryButtonText}>Download invoice</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -359,6 +362,11 @@ export function ResidentUtilityScreen({
                       <Pressable style={styles.secondaryButton} onPress={() => setSelectedInvoiceId(invoice.id)}>
                         <Text style={styles.secondaryButtonText}>View detail</Text>
                       </Pressable>
+                      {invoice.pdf_url ? (
+                        <Pressable style={styles.secondaryButton} onPress={() => void openLink(invoice.pdf_url || '', invoice.invoice_number || 'Invoice PDF')}>
+                          <Text style={styles.secondaryButtonText}>Download invoice</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 ))
@@ -447,7 +455,7 @@ export function ResidentUtilityScreen({
 
             <Section title="Latest notices">
               {notices.length ? (
-                notices.slice(0, 5).map((notice) => <NoticeCard key={notice.id} notice={notice} compact />)
+                notices.slice(0, 5).map((notice) => <NoticeCard key={notice.id} notice={notice} compact onPress={() => setSelectedNotice(notice)} />)
               ) : (
                 <EmptyState title="No notices yet" detail="Society announcements will show up here when published." />
               )}
@@ -458,7 +466,7 @@ export function ResidentUtilityScreen({
         {route === 'notices' ? (
           <Section title="All notices">
             {notices.length ? (
-              notices.map((notice) => <NoticeCard key={notice.id} notice={notice} />)
+              notices.map((notice) => <NoticeCard key={notice.id} notice={notice} onPress={() => setSelectedNotice(notice)} />)
             ) : (
               <EmptyState title="No notices published" detail="Admin announcements and urgent updates will appear here." />
             )}
@@ -585,6 +593,48 @@ export function ResidentUtilityScreen({
           </Section>
         ) : null}
       </ScrollView>
+
+      <Modal visible={Boolean(selectedNotice)} transparent animationType="slide" onRequestClose={() => setSelectedNotice(null)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.copy}>
+                <Text style={styles.modalTitle}>{selectedNotice?.title || 'Notice detail'}</Text>
+                <Text style={styles.itemMeta}>
+                  {selectedNotice?.created_by_name || 'Admin'} / {formatDateTime(selectedNotice?.published_at || selectedNotice?.created_at || null)}
+                </Text>
+              </View>
+              <Pressable onPress={() => setSelectedNotice(null)} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            {selectedNotice ? (
+              <>
+                <View style={styles.noticeBadgeRow}>
+                  <Badge label={selectedNotice.notice_type} tone={getNoticeTone(selectedNotice.notice_type)} />
+                  {selectedNotice.is_pinned ? <Badge label="Pinned" tone="info" /> : null}
+                </View>
+                <ScrollView contentContainerStyle={styles.modalBody}>
+                  <Text style={styles.noticeDetailText}>{selectedNotice.content}</Text>
+                  {selectedNotice.attachments?.length ? (
+                    <View style={styles.modalSection}>
+                      <Text style={styles.subSectionTitle}>Attachments</Text>
+                      {selectedNotice.attachments.map((attachment, index) => {
+                        const url = attachment.url || attachment.file_path || '';
+                        return (
+                          <Pressable key={`${selectedNotice.id}-attachment-${index}`} style={styles.secondaryButton} onPress={() => void openLink(url, attachment.file_name || 'Notice attachment')}>
+                            <Text style={styles.secondaryButtonText}>{attachment.file_name || `Attachment ${index + 1}`}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -699,9 +749,9 @@ function ServiceStaffGroup({
   );
 }
 
-function NoticeCard({ notice, compact = false }: { notice: NoticeItem; compact?: boolean }) {
+function NoticeCard({ notice, compact = false, onPress }: { notice: NoticeItem; compact?: boolean; onPress?: () => void }) {
   return (
-    <View style={styles.listCard}>
+    <Pressable style={styles.listCard} onPress={onPress}>
       <View style={styles.rowBetween}>
         <View style={styles.copy}>
           <Text style={styles.itemTitle}>{notice.title}</Text>
@@ -720,7 +770,7 @@ function NoticeCard({ notice, compact = false }: { notice: NoticeItem; compact?:
       {notice.attachments?.length ? (
         <Text style={styles.itemMeta}>{notice.attachments.length} attachment(s) shared with this notice.</Text>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -769,14 +819,16 @@ async function handleCall(phoneNumber: string, label: string) {
     return;
   }
 
-  const telUrl = `tel:${normalizedNumber}`;
-  const supported = await Linking.canOpenURL(telUrl);
-  if (!supported) {
-    Alert.alert('Unable to call', 'Calling is not supported on this device.');
-    return;
+  const telUrl = Platform.OS === 'ios' ? `telprompt:${normalizedNumber}` : `tel:${normalizedNumber}`;
+  try {
+    await Linking.openURL(telUrl);
+  } catch {
+    try {
+      await Linking.openURL(`tel:${normalizedNumber}`);
+    } catch {
+      Alert.alert('Unable to call', `Dial manually: ${normalizedNumber}`);
+    }
   }
-
-  await Linking.openURL(telUrl);
 }
 
 function resolveAbsoluteUrl(fileUrl: string) {
@@ -1029,10 +1081,20 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'flex-end',
   },
+  noticeBadgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   noticeContent: {
     color: colors.text,
     fontSize: 13,
     lineHeight: 19,
+  },
+  noticeDetailText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
   },
   actionRow: {
     flexDirection: 'row',
@@ -1118,6 +1180,44 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   callButtonText: {
+    color: colors.primaryDeep,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  modalScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 20, 35, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: colors.surface,
+    padding: 18,
+    gap: 14,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  modalBody: {
+    gap: 14,
+    paddingBottom: 16,
+  },
+  modalSection: {
+    gap: 10,
+  },
+  closeButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  closeButtonText: {
     color: colors.primaryDeep,
     fontSize: 13,
     fontWeight: '800',
