@@ -357,6 +357,7 @@ export type PollItem = {
   created_at?: string | null;
   options: Array<{ id?: number; option_text: string }>;
   response_count: number;
+  user_response_option_id?: number | null;
 };
 
 export type EventItem = {

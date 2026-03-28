@@ -16,6 +16,7 @@ router.post('/notices', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicati
 router.post('/send', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.sendBroadcast);
 router.get('/polls', communicationController.getPolls);
 router.post('/polls', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.createPoll);
+router.post('/polls/:id/respond', communicationController.respondToPoll);
 router.get('/events', communicationController.getEvents);
 router.post('/events', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.createEvent);
 router.get('/documents', communicationController.getDocuments);

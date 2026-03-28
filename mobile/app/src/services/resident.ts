@@ -277,6 +277,18 @@ export async function fetchCommunicationPolls() {
   }
 }
 
+export async function submitPollResponse(pollId: number, optionId: number) {
+  try {
+    const response = await api.post<{ success: boolean; message?: string; option_id?: number; response_count?: number }>(
+      `/communication/polls/${pollId}/respond`,
+      { option_id: optionId },
+    );
+    return response.data;
+  } catch (error) {
+    return { success: false, message: getApiErrorMessage(error, 'Unable to submit poll response.') };
+  }
+}
+
 export async function fetchCommunicationEvents() {
   try {
     const response = await api.get<{ success: boolean; events: EventItem[] }>('/communication/events');

@@ -94,7 +94,7 @@ const mapNoticeRow = (row) => ({
     read_count: Number(row.read_count || 0),
 });
 
-const mapPollRow = (row, optionsByPollId, responseCountByPollId) => ({
+const mapPollRow = (row, optionsByPollId, responseCountByPollId, userResponseByPollId = new Map()) => ({
     id: row.id,
     title: row.title,
     description: row.description || '',
@@ -107,6 +107,7 @@ const mapPollRow = (row, optionsByPollId, responseCountByPollId) => ({
     created_at: formatDateTime(row.created_at),
     options: optionsByPollId.get(row.id) || [],
     response_count: responseCountByPollId.get(row.id) || 0,
+    user_response_option_id: userResponseByPollId.get(row.id) || null,
 });
 
 const mapEventRow = (row, rsvpByEventId) => ({
@@ -580,10 +581,11 @@ exports.sendEmergencyAlert = async (req, res) => {
 
 exports.getPolls = async (req, res) => {
     try {
-        const [polls, options, responses] = await Promise.all([
+        const [polls, options, responses, myResponses] = await Promise.all([
             db.query(`SELECT * FROM communication_polls WHERE society_id = ? ORDER BY created_at DESC`, [req.user.society_id]),
             db.query(`SELECT poll_id, id, option_text FROM communication_poll_options WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?) ORDER BY id`, [req.user.society_id]),
             db.query(`SELECT poll_id, COUNT(*) AS total FROM communication_poll_responses WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?) GROUP BY poll_id`, [req.user.society_id]),
+            db.query(`SELECT poll_id, option_id FROM communication_poll_responses WHERE user_id = ? AND poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?)`, [req.user.id, req.user.society_id]),
         ]);
 
         const optionsByPollId = new Map();
@@ -594,10 +596,11 @@ exports.getPolls = async (req, res) => {
         });
 
         const responseCountByPollId = new Map(responses[0].map((row) => [row.poll_id, Number(row.total)]));
+        const userResponseByPollId = new Map(myResponses[0].map((row) => [row.poll_id, Number(row.option_id)]));
 
         return res.status(200).json({
             success: true,
-            polls: polls[0].map((row) => mapPollRow(row, optionsByPollId, responseCountByPollId)),
+            polls: polls[0].map((row) => mapPollRow(row, optionsByPollId, responseCountByPollId, userResponseByPollId)),
         });
     } catch (error) {
         console.error('getPolls error:', error);
@@ -641,6 +644,74 @@ exports.createPoll = async (req, res) => {
     } catch (error) {
         console.error('createPoll error:', error);
         return res.status(500).json({ success: false, message: 'Server error creating poll' });
+    }
+};
+
+exports.respondToPoll = async (req, res) => {
+    try {
+        const pollId = Number(req.params.id);
+        const optionId = Number(req.body.option_id);
+
+        if (!pollId || !optionId) {
+            return res.status(400).json({ success: false, message: 'Poll and option are required' });
+        }
+
+        const [pollRows] = await db.query(
+            `SELECT id, society_id, status, starts_at, ends_at
+             FROM communication_polls
+             WHERE id = ? AND society_id = ?`,
+            [pollId, req.user.society_id]
+        );
+
+        const poll = pollRows[0];
+        if (!poll) {
+            return res.status(404).json({ success: false, message: 'Poll not found' });
+        }
+
+        if (poll.status !== 'Live') {
+            return res.status(400).json({ success: false, message: 'This poll is not accepting responses right now' });
+        }
+
+        const now = new Date();
+        if (poll.starts_at && new Date(poll.starts_at).getTime() > now.getTime()) {
+            return res.status(400).json({ success: false, message: 'This poll has not started yet' });
+        }
+        if (poll.ends_at && new Date(poll.ends_at).getTime() < now.getTime()) {
+            return res.status(400).json({ success: false, message: 'This poll has already ended' });
+        }
+
+        const [optionRows] = await db.query(
+            `SELECT id
+             FROM communication_poll_options
+             WHERE id = ? AND poll_id = ?`,
+            [optionId, pollId]
+        );
+
+        if (!optionRows.length) {
+            return res.status(400).json({ success: false, message: 'Selected option is invalid for this poll' });
+        }
+
+        await db.query(
+            `INSERT INTO communication_poll_responses (poll_id, user_id, option_id, responded_at)
+             VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE option_id = VALUES(option_id), responded_at = NOW()`,
+            [pollId, req.user.id, optionId]
+        );
+
+        const [[countRow]] = await db.query(
+            `SELECT COUNT(*) AS total FROM communication_poll_responses WHERE poll_id = ?`,
+            [pollId]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: 'Poll response recorded successfully',
+            option_id: optionId,
+            response_count: Number(countRow.total || 0),
+        });
+    } catch (error) {
+        console.error('respondToPoll error:', error);
+        return res.status(500).json({ success: false, message: 'Server error saving poll response' });
     }
 };
 

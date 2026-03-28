@@ -19,6 +19,7 @@ import {
   fetchCommunicationEvents,
   fetchCommunicationPolls,
   fetchCommunicationThread,
+  submitPollResponse,
   fetchCommitteeDirectory,
   fetchBillingSummary,
   fetchImportantContacts,
@@ -107,6 +108,8 @@ export function ResidentUtilityScreen({
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
   const [selectedPoll, setSelectedPoll] = useState<PollItem | null>(null);
+  const [selectedPollOptionId, setSelectedPollOptionId] = useState<number | null>(null);
+  const [submittingPollResponse, setSubmittingPollResponse] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<CommunicationConversation | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<SharedDocument | null>(null);
@@ -357,12 +360,50 @@ export function ResidentUtilityScreen({
       setConnectTab('notices');
       setSelectedNotice(null);
       setSelectedPoll(null);
+      setSelectedPollOptionId(null);
       setSelectedEvent(null);
       setSelectedConversation(null);
       setSelectedDocument(null);
       setConversationThread([]);
     }
   }, [route]);
+
+  useEffect(() => {
+    setSelectedPollOptionId(selectedPoll?.user_response_option_id || null);
+  }, [selectedPoll]);
+
+  const handlePollResponse = useCallback(async () => {
+    if (!selectedPoll || !selectedPollOptionId) {
+      Alert.alert('Select an option', 'Choose one poll option before submitting.');
+      return;
+    }
+
+    setSubmittingPollResponse(true);
+    const response = await submitPollResponse(selectedPoll.id, selectedPollOptionId);
+    setSubmittingPollResponse(false);
+
+    if (!response.success) {
+      Alert.alert('Unable to submit vote', response.message || 'Please try again.');
+      return;
+    }
+
+    const updatedPoll: PollItem = {
+      ...selectedPoll,
+      user_response_option_id: response.option_id ?? selectedPollOptionId,
+      response_count: response.response_count ?? selectedPoll.response_count,
+    };
+    setSelectedPoll(updatedPoll);
+    setPolls((current) => current.map((poll) => (
+      poll.id === selectedPoll.id
+        ? {
+            ...poll,
+            user_response_option_id: response.option_id ?? selectedPollOptionId,
+            response_count: response.response_count ?? poll.response_count,
+          }
+        : poll
+    )));
+    Alert.alert('Vote recorded', 'Your poll response has been saved.');
+  }, [selectedPoll, selectedPollOptionId]);
 
   return (
     <View style={styles.screen}>
@@ -931,12 +972,38 @@ export function ResidentUtilityScreen({
                 <View style={styles.modalSection}>
                   <Text style={styles.subSectionTitle}>Options</Text>
                   {selectedPoll.options.map((option, index) => (
-                    <View key={`${selectedPoll.id}-option-${index}`} style={styles.lineItemRow}>
-                      <Text style={styles.itemMeta}>{option.option_text}</Text>
-                    </View>
+                    <Pressable
+                      key={`${selectedPoll.id}-option-${index}`}
+                      style={[
+                        styles.pollOptionCard,
+                        selectedPollOptionId === option.id ? styles.pollOptionCardActive : null,
+                      ]}
+                      onPress={() => setSelectedPollOptionId(option.id || null)}
+                    >
+                      <Text
+                        style={[
+                          styles.itemMeta,
+                          selectedPollOptionId === option.id ? styles.pollOptionTextActive : null,
+                        ]}
+                      >
+                        {option.option_text}
+                      </Text>
+                      {selectedPollOptionId === option.id ? <Badge label="Selected" tone="success" /> : null}
+                    </Pressable>
                   ))}
                 </View>
                 <Text style={styles.itemMeta}>{selectedPoll.response_count} response(s) recorded</Text>
+                <View style={styles.actionRow}>
+                  <Pressable
+                    style={[styles.openButton, (!selectedPollOptionId || submittingPollResponse) ? styles.disabledButton : null]}
+                    onPress={() => void handlePollResponse()}
+                    disabled={!selectedPollOptionId || submittingPollResponse}
+                  >
+                    <Text style={styles.openButtonText}>
+                      {submittingPollResponse ? 'Submitting...' : selectedPoll.user_response_option_id ? 'Update response' : 'Submit response'}
+                    </Text>
+                  </Pressable>
+                </View>
               </ScrollView>
             ) : null}
           </View>
@@ -1482,6 +1549,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
+  disabledButton: {
+    opacity: 0.55,
+  },
   secondaryButton: {
     borderRadius: 14,
     backgroundColor: colors.surface,
@@ -1493,6 +1563,26 @@ const styles = StyleSheet.create({
   openButtonText: {
     color: colors.white,
     fontSize: 13,
+    fontWeight: '800',
+  },
+  pollOptionCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  pollOptionCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: '#eef4ff',
+  },
+  pollOptionTextActive: {
+    color: colors.primaryDeep,
     fontWeight: '800',
   },
   secondaryButtonText: {
