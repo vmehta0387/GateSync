@@ -115,6 +115,8 @@ async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = '
         body,
         data,
         sound,
+        priority: 'high',
+        channelId: 'default',
         ...(categoryId ? { categoryId } : {}),
     }));
 
