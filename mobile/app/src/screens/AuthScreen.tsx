@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,9 +13,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GateSyncHexLogo } from '../components/GateSyncHexLogo';
 import { getBiometricSupport } from '../lib/biometrics';
+import { openLegalPage } from '../lib/legal';
 import { readBiometricSettings, writeBiometricSettings } from '../lib/storage';
+import { Logo } from '../components/Logo';
 import { useSession } from '../providers/SessionProvider';
 import { buildStoredSession, sendOtp, verifyOtp } from '../services/auth';
 import { colors } from '../theme';
@@ -204,7 +205,7 @@ export function AuthScreen() {
         >
           <View style={[styles.card, responsiveStyles.card]}>
             <View style={[styles.hero, responsiveStyles.hero]}>
-              <GateSyncHexLogo size={logoSize} />
+              <Logo size={logoSize} />
               <View style={styles.wordmarkRow}>
                 <Text style={[styles.wordmarkGate, responsiveStyles.wordmarkGate]}>Gate</Text>
                 <Text style={[styles.wordmarkSync, responsiveStyles.wordmarkSync]}>Sync</Text>
@@ -291,11 +292,11 @@ export function AuthScreen() {
 
             <Text style={[styles.legalText, responsiveStyles.legalText]}>
               By using GateSync, you agree to our{' '}
-              <Text style={styles.legalLink} onPress={() => void Linking.openURL('https://gatesync.in/terms')}>
+              <Text style={styles.legalLink} onPress={() => void openLegalPage('/terms')}>
                 Terms of Service
               </Text>{' '}
               &amp;{' '}
-              <Text style={styles.legalLink} onPress={() => void Linking.openURL('https://gatesync.in/privacy')}>
+              <Text style={styles.legalLink} onPress={() => void openLegalPage('/privacy')}>
                 Privacy Policy
               </Text>.
             </Text>
@@ -403,7 +404,7 @@ const styles = StyleSheet.create({
     letterSpacing: -1.1,
   },
   wordmarkSync: {
-    color: '#22c7f2',
+    color: '#06B6D4',
     fontSize: 34,
     fontWeight: '900',
     letterSpacing: -1.1,

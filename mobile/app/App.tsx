@@ -19,7 +19,12 @@ function AppContent() {
       return;
     }
 
-    void syncPushRegistration(session);
+    void (async () => {
+      const result = await syncPushRegistration(session);
+      if (!result.success) {
+        console.warn('Push registration skipped:', result.message || 'Unknown push registration error');
+      }
+    })();
   }, [hydrated, session]);
 
   if (!hydrated) {

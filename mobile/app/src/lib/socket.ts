@@ -19,12 +19,22 @@ let socket: SocketLike | null = null;
 function getSocket() {
   if (!socket) {
     const socketModule = require('socket.io-client') as {
-      io: (url: string, options: { autoConnect: boolean; transports: string[] }) => SocketLike;
+      io: (
+        url: string,
+        options: {
+          autoConnect: boolean;
+          transports?: string[];
+          reconnection?: boolean;
+          timeout?: number;
+        },
+      ) => SocketLike;
     };
 
     socket = socketModule.io(SOCKET_URL, {
       autoConnect: false,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      timeout: 10000,
     });
   }
 

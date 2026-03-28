@@ -1,4 +1,5 @@
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { openLegalPage } from '../lib/legal';
 import { useSession } from '../providers/SessionProvider';
 import { colors } from '../theme';
 
@@ -44,9 +45,15 @@ export function GuardProfileScreen() {
       </View>
 
       <View style={styles.footerPanel}>
-        <Pressable onPress={() => void Linking.openURL('https://gatesync.in/privacy')} style={styles.footerLink}>
-          <Text style={styles.footerLinkText}>Privacy Policy</Text>
-        </Pressable>
+        <View style={styles.footerLinks}>
+          <Pressable onPress={() => void openLegalPage('/terms')} style={styles.footerLink}>
+            <Text style={styles.footerLinkText}>Terms of Service</Text>
+          </Pressable>
+          <View style={styles.footerDivider} />
+          <Pressable onPress={() => void openLegalPage('/privacy')} style={styles.footerLink}>
+            <Text style={styles.footerLinkText}>Privacy Policy</Text>
+          </Pressable>
+        </View>
         <Text style={styles.versionLabel}>Version 1.0.0 (Release)</Text>
       </View>
     </View>
@@ -175,6 +182,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  footerLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   footerLink: {
     padding: 8,
   },
@@ -183,6 +195,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  footerDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: colors.border,
+    marginHorizontal: 4,
   },
   versionLabel: {
     color: colors.textMuted,

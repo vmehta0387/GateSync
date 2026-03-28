@@ -31,6 +31,11 @@ type CreatedPass = {
   expected_time: string;
 };
 
+function buildPassQrUrl(passcode: string) {
+  const qrValue = encodeURIComponent(`GATESYNC-PASS:${passcode}`);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${qrValue}`;
+}
+
 function buildPassFromLog(log: VisitorLog): CreatedPass {
   return {
     passcode: log.passcode || 'Approved',
@@ -131,8 +136,7 @@ export function ResidentVisitorsScreen() {
       return null;
     }
 
-    const qrValue = encodeURIComponent(`GATESYNC-PASS:${activePassCard.passcode}`);
-    return { uri: `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${qrValue}` };
+    return { uri: buildPassQrUrl(activePassCard.passcode) };
   }, [activePassCard]);
 
   useEffect(() => {
@@ -188,28 +192,41 @@ export function ResidentVisitorsScreen() {
       return;
     }
 
+    const qrUrl = buildPassQrUrl(pass.passcode);
+
     const lines = [
       `GateSync visitor pass for ${pass.name}`,
       `Passcode: ${pass.passcode}`,
       `Flat: ${pass.flat_label}`,
       `Purpose: ${pass.purpose}`,
       pass.expected_time ? `Expected time: ${pass.expected_time}` : null,
+      `QR code: ${qrUrl}`,
       'Show this passcode at the gate for fast entry.',
     ].filter(Boolean);
 
     const message = lines.join('\n');
 
     if (mode === 'whatsapp') {
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
-      const supported = await Linking.canOpenURL(whatsappUrl);
-      if (supported) {
-        await Linking.openURL(whatsappUrl);
+      const whatsappAppUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      const whatsappWebUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+      try {
+        await Linking.openURL(whatsappAppUrl);
         return;
+      } catch {
+        try {
+          await Linking.openURL(whatsappWebUrl);
+          return;
+        } catch {
+          Alert.alert('Unable to open WhatsApp', 'Opening the share sheet instead.');
+        }
       }
-      Alert.alert('WhatsApp not available', 'WhatsApp is not installed on this device. Opening the share sheet instead.');
+
+      await Share.share({ message, url: qrUrl });
+      return;
     }
 
-    await Share.share({ message });
+    await Share.share({ message, url: qrUrl });
   }, [activePassCard]);
 
   const openPassCardFromLog = useCallback((log: VisitorLog) => {

@@ -28,8 +28,8 @@ export default function PrivacyPolicyPage() {
               Introduction
             </h2>
             <p className="text-lg leading-relaxed text-white/70">
-              Welcome to GatePulse. We are committed to protecting your personal information and your right to privacy. 
-              If you have any questions or concerns about our policy, or our practices with regards to your personal 
+              Welcome to GatePulse. We are committed to protecting your personal information and your right to privacy.
+              If you have any questions or concerns about our policy, or our practices with regards to your personal
               information, please contact us at privacy@gatesync.in.
             </p>
           </section>
@@ -40,8 +40,8 @@ export default function PrivacyPolicyPage() {
               Information We Collect
             </h2>
             <p className="text-lg leading-relaxed text-white/70 mb-4">
-              We collect personal information that you voluntarily provide to us when you register on the App, 
-              express an interest in obtaining information about us or our products and services, or otherwise 
+              We collect personal information that you voluntarily provide to us when you register on the App,
+              express an interest in obtaining information about us or our products and services, or otherwise
               contact us.
             </p>
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-4 list-none p-0">
@@ -67,9 +67,9 @@ export default function PrivacyPolicyPage() {
               How We Use Your Information
             </h2>
             <p className="text-lg leading-relaxed text-white/70">
-              We use personal information collected via our App for a variety of business purposes described below. 
-              We process your personal information for these purposes in reliance on our legitimate business interests, 
-              in order to enter into or perform a contract with you, with your consent, and/or for compliance with 
+              We use personal information collected via our App for a variety of business purposes described below.
+              We process your personal information for these purposes in reliance on our legitimate business interests,
+              in order to enter into or perform a contract with you, with your consent, and/or for compliance with
               our legal obligations.
             </p>
           </section>
@@ -77,8 +77,8 @@ export default function PrivacyPolicyPage() {
           <section className="p-8 rounded-3xl bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-500/20">
             <h2 className="text-2xl font-bold text-white mb-4 italic">Security Matters</h2>
             <p className="text-lg leading-relaxed text-blue-100/70 italic">
-              We aim to protect your personal information through a system of organizational and technical security 
-              measures. We have implemented appropriate internal control measures designed to protect the security 
+              We aim to protect your personal information through a system of organizational and technical security
+              measures. We have implemented appropriate internal control measures designed to protect the security
               of any personal information we process.
             </p>
           </section>

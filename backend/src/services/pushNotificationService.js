@@ -10,7 +10,10 @@ const normalizeUserIds = (userIds = []) => (
     )]
 );
 
-const isExpoPushToken = (value) => typeof value === 'string' && /^ExponentPushToken\[[^\]]+\]$/.test(value.trim());
+const isExpoPushToken = (value) => (
+    typeof value === 'string' &&
+    /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/.test(value.trim())
+);
 
 const chunk = (items, size) => {
     const result = [];
