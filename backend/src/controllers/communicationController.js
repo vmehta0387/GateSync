@@ -105,6 +105,7 @@ const mapPollRow = (row, optionsByPollId, responseCountByPollId, userResponseByP
     ends_at: formatDateTime(row.ends_at),
     status: row.status,
     created_at: formatDateTime(row.created_at),
+    created_by_name: row.created_by_name || '',
     options: optionsByPollId.get(row.id) || [],
     response_count: responseCountByPollId.get(row.id) || 0,
     user_response_option_id: userResponseByPollId.get(row.id) || null,
@@ -581,17 +582,66 @@ exports.sendEmergencyAlert = async (req, res) => {
 
 exports.getPolls = async (req, res) => {
     try {
-        const [polls, options, responses, myResponses] = await Promise.all([
-            db.query(`SELECT * FROM communication_polls WHERE society_id = ? ORDER BY created_at DESC`, [req.user.society_id]),
+        const [polls, options, responses, myResponses, optionBreakdown, responderRows] = await Promise.all([
+            db.query(`
+                SELECT p.*, creator.name AS created_by_name
+                FROM communication_polls p
+                LEFT JOIN users creator ON creator.id = p.created_by
+                WHERE p.society_id = ?
+                ORDER BY p.created_at DESC
+            `, [req.user.society_id]),
             db.query(`SELECT poll_id, id, option_text FROM communication_poll_options WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?) ORDER BY id`, [req.user.society_id]),
             db.query(`SELECT poll_id, COUNT(*) AS total FROM communication_poll_responses WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?) GROUP BY poll_id`, [req.user.society_id]),
             db.query(`SELECT poll_id, option_id FROM communication_poll_responses WHERE user_id = ? AND poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?)`, [req.user.id, req.user.society_id]),
+            db.query(`
+                SELECT poll_id, option_id, COUNT(*) AS total
+                FROM communication_poll_responses
+                WHERE poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?)
+                GROUP BY poll_id, option_id
+            `, [req.user.society_id]),
+            db.query(`
+                SELECT
+                    r.poll_id,
+                    r.option_id,
+                    r.user_id,
+                    r.responded_at,
+                    u.name AS user_name,
+                    f.block_name,
+                    f.flat_number
+                FROM communication_poll_responses r
+                JOIN users u ON u.id = r.user_id
+                LEFT JOIN user_flats uf ON uf.user_id = u.id
+                LEFT JOIN flats f ON f.id = uf.flat_id
+                WHERE r.poll_id IN (SELECT id FROM communication_polls WHERE society_id = ?)
+                ORDER BY r.responded_at DESC
+            `, [req.user.society_id]),
         ]);
+
+        const optionCountByPollOptionId = new Map(optionBreakdown[0].map((row) => [`${row.poll_id}:${row.option_id}`, Number(row.total)]));
+        const respondersByPollOptionId = new Map();
+        responderRows[0].forEach((row) => {
+            const key = `${row.poll_id}:${row.option_id}`;
+            const existing = respondersByPollOptionId.get(key) || [];
+            existing.push({
+                user_id: row.user_id,
+                user_name: row.user_name,
+                block_name: row.block_name || '',
+                flat_number: row.flat_number || '',
+                responded_at: formatDateTime(row.responded_at),
+            });
+            respondersByPollOptionId.set(key, existing);
+        });
 
         const optionsByPollId = new Map();
         options[0].forEach((row) => {
             const existing = optionsByPollId.get(row.poll_id) || [];
-            existing.push({ id: row.id, option_text: row.option_text });
+            const key = `${row.poll_id}:${row.id}`;
+            existing.push({
+                id: row.id,
+                option_text: row.option_text,
+                response_count: optionCountByPollOptionId.get(key) || 0,
+                respondents: respondersByPollOptionId.get(key) || [],
+            });
             optionsByPollId.set(row.poll_id, existing);
         });
 

@@ -63,8 +63,28 @@ export type ThreadMessage = {
 export type PollItem = {
   id: number;
   title: string;
+  description?: string;
+  poll_type?: string;
+  target_scope?: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  status?: string;
+  created_at?: string | null;
+  created_by_name?: string;
+  user_response_option_id?: number | null;
   response_count: number;
-  options: Array<{ option_text: string }>;
+  options: Array<{
+    id?: number;
+    option_text: string;
+    response_count?: number;
+    respondents?: Array<{
+      user_id: number;
+      user_name: string;
+      block_name?: string;
+      flat_number?: string;
+      responded_at?: string | null;
+    }>;
+  }>;
 };
 
 export type EventItem = {
