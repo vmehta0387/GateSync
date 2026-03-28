@@ -112,7 +112,7 @@ export function ResidentHomeScreen({
     { code: 'approve-entry', icon: 'check-decagram-outline', label: 'Approve Entry', helper: 'Gate requests', tab: 'visitors', badge: pendingApprovals.length ? String(pendingApprovals.length) : '' },
     { code: 'amenities', icon: 'pool', label: 'Amenities', helper: 'Book facilities', tab: 'facilities' },
     { code: 'complaints', icon: 'clipboard-alert-outline', label: 'Complaints', helper: 'Raise issue', tab: 'complaints' },
-    { code: 'notices', icon: 'bullhorn-outline', label: 'Notices', helper: 'Society updates', actionRoute: 'notices' },
+    { code: 'resident-hub', icon: 'forum-outline', label: 'Resident Hub', helper: 'Notices, updates & events', actionRoute: 'communication' },
     { code: 'my-flat', icon: 'home-city-outline', label: 'My Flat', helper: flats[0] ? `${flats[0].block_name}-${flats[0].flat_number}` : 'Apartment info', actionRoute: 'myFlat' },
     { code: 'staff', icon: 'toolbox-outline', label: 'Staff', helper: 'Household staff', actionRoute: 'staff' },
     { code: 'documents', icon: 'folder-outline', label: 'Documents', helper: 'Rules and files', actionRoute: 'documents' },

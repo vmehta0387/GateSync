@@ -1,1 +1,1 @@
-export type ResidentActionRoute = 'bills' | 'society' | 'notices' | 'myFlat' | 'staff' | 'documents';
+export type ResidentActionRoute = 'bills' | 'society' | 'communication' | 'myFlat' | 'staff' | 'documents';

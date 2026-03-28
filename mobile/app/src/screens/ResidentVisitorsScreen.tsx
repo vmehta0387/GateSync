@@ -223,8 +223,16 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
     () => (form.expected_time ? new Date(form.expected_time) : new Date(Date.now() + DAY_IN_MS)),
     [form.expected_time],
   );
+  const selectedExpectedDateLabel = useMemo(
+    () => (form.expected_time ? selectedExpectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'),
+    [form.expected_time, selectedExpectedDate],
+  );
+  const selectedExpectedTimeLabel = useMemo(
+    () => (form.expected_time ? selectedExpectedDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : 'Not set'),
+    [form.expected_time, selectedExpectedDate],
+  );
   const expectedTimeLabel = useMemo(
-    () => (form.expected_time ? formatDateTime(form.expected_time) : 'Not set. Pass will remain valid for 24 hours.'),
+    () => (form.expected_time ? `Expected ${formatDateTime(form.expected_time)}` : 'If you do not pick a time, the pass will stay valid for 24 hours.'),
     [form.expected_time],
   );
 
@@ -288,10 +296,6 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
 
   const clearExpectedTime = () => {
     setForm((current) => ({ ...current, expected_time: '' }));
-  };
-
-  const useDefault24HourValidity = () => {
-    setForm((current) => ({ ...current, expected_time: getDefaultPassExpiryIso() }));
   };
 
   const handleExpectedDateChange = (_event: DateTimePickerEvent, nextDate?: Date) => {
@@ -462,15 +466,22 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
               </Pressable>
             </View>
             <Text style={styles.helperText}>{expectedTimeLabel}</Text>
+            <View style={styles.selectedDateTimeRow}>
+              <View style={styles.selectedDateTimeCard}>
+                <Text style={styles.selectedDateTimeLabel}>Date</Text>
+                <Text style={styles.selectedDateTimeValue}>{selectedExpectedDateLabel}</Text>
+              </View>
+              <View style={styles.selectedDateTimeCard}>
+                <Text style={styles.selectedDateTimeLabel}>Time</Text>
+                <Text style={styles.selectedDateTimeValue}>{selectedExpectedTimeLabel}</Text>
+              </View>
+            </View>
             <View style={styles.timePickerRow}>
-              <Pressable style={styles.secondaryButton} onPress={() => setShowExpectedDatePicker(true)}>
+              <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowExpectedDatePicker(true)}>
                 <Text style={styles.secondaryButtonText}>Pick date</Text>
               </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => setShowExpectedTimePicker(true)}>
+              <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowExpectedTimePicker(true)}>
                 <Text style={styles.secondaryButtonText}>Pick time</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={useDefault24HourValidity}>
-                <Text style={styles.secondaryButtonText}>Use 24h</Text>
               </Pressable>
             </View>
           </View>
@@ -698,6 +709,19 @@ const styles = StyleSheet.create({
   flatChipText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   flatChipTextActive: { color: colors.white },
   pickerPanel: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, padding: 14, gap: 10 },
+  selectedDateTimeRow: { flexDirection: 'row', gap: 10 },
+  selectedDateTimeCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#bfd3ff',
+    backgroundColor: colors.white,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  selectedDateTimeLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+  selectedDateTimeValue: { color: colors.primaryDeep, fontSize: 17, fontWeight: '900', lineHeight: 22 },
   timePickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   switchLabel: { color: colors.text, fontSize: 14, fontWeight: '700' },
@@ -718,6 +742,7 @@ const styles = StyleSheet.create({
   secondaryShareButton: { borderRadius: 16, borderWidth: 1, borderColor: '#bde0c2', backgroundColor: colors.white, alignItems: 'center', paddingVertical: 12 },
   secondaryShareButtonText: { color: colors.text, fontSize: 13, fontWeight: '800' },
   secondaryButton: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', paddingVertical: 11, paddingHorizontal: 12 },
+  rowInput: { flex: 1 },
   secondaryButtonText: { color: colors.text, fontSize: 13, fontWeight: '800' },
   historyTabRow: { flexDirection: 'row', gap: 8 },
   historyTabButton: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12 },

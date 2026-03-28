@@ -146,6 +146,8 @@ const mapMemberRow = (row) => ({
     phone_number: row.phone_number,
     email: row.email,
     user_role: row.user_role,
+    block_name: row.block_name || '',
+    flat_number: row.flat_number || '',
     role_title: row.role_title,
     permission_scope: row.permission_scope,
     permissions: parseJson(row.permissions_json, {}),
@@ -222,9 +224,13 @@ const getCommitteeMembers = async (committeeId) => {
             u.name,
             u.phone_number,
             u.email,
-            u.role AS user_role
+            u.role AS user_role,
+            f.block_name,
+            f.flat_number
          FROM committee_members cm
          JOIN users u ON u.id = cm.user_id
+         LEFT JOIN user_flats uf ON uf.user_id = u.id
+         LEFT JOIN flats f ON f.id = uf.flat_id
          WHERE cm.committee_id = ?
          ORDER BY cm.is_primary_contact DESC, cm.role_title ASC, u.name ASC`,
         [committeeId]
@@ -466,14 +472,24 @@ exports.getPublicDirectory = async (req, res) => {
             [req.user.society_id]
         );
 
-        const directory = await Promise.all(
-            committees.map(async (committee) => ({
-                ...mapCommitteeRow({ ...committee, created_by_name: null, member_count: 0, open_task_count: 0, live_vote_count: 0, document_count: 0 }),
-                members: await getCommitteeMembers(committee.id),
-            }))
+        const normalizedDirectory = await Promise.all(
+            committees.map(async (committee) => {
+                const members = await getCommitteeMembers(committee.id);
+                return {
+                    ...mapCommitteeRow({
+                        ...committee,
+                        created_by_name: null,
+                        member_count: members.length,
+                        open_task_count: 0,
+                        live_vote_count: 0,
+                        document_count: 0,
+                    }),
+                    members,
+                };
+            })
         );
 
-        return res.status(200).json({ success: true, committees: directory });
+        return res.status(200).json({ success: true, committees: normalizedDirectory });
     } catch (error) {
         console.error('getPublicDirectory error:', error);
         return res.status(500).json({ success: false, message: 'Server error fetching committee directory' });

@@ -136,6 +136,12 @@ export default function CommitteeManagementPage() {
     setIsCreating(true);
   };
 
+  const openCommitteeEditor = (committeeId: number) => {
+    setSelectedCommitteeId(committeeId);
+    setActiveTab('members');
+    setIsCreating(true);
+  };
+
   const addMemberDraft = () => {
     const userId = Number(memberDraft.user_id);
     if (!userId) return;
@@ -180,11 +186,12 @@ export default function CommitteeManagementPage() {
       }
 
       await loadCommittees();
-        if (!selectedCommitteeId && 'committee_id' in data && data.committee_id) {
-          setSelectedCommitteeId(data.committee_id as number);
-        } else if (selectedCommitteeId) {
+      if (!selectedCommitteeId && 'committee_id' in data && data.committee_id) {
+        setSelectedCommitteeId(data.committee_id as number);
+      } else if (selectedCommitteeId) {
         await loadDetail(selectedCommitteeId);
       }
+      setIsCreating(false);
     } finally {
       setSavingCommittee(false);
     }
@@ -257,9 +264,9 @@ export default function CommitteeManagementPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-14rem)] min-h-[700px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex min-h-[700px] flex-col rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:flex-row">
       {/* Sidebar: Committees List */}
-      <div className="flex w-full flex-col border-r border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50 sm:w-80 md:w-96 shrink-0">
+      <div className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50 lg:w-96 lg:border-b-0 lg:border-r">
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 backdrop-blur-md">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -272,7 +279,7 @@ export default function CommitteeManagementPage() {
           </div>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search committees..." className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-4 pr-4 text-sm font-medium outline-none transition-all focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 dark:border-slate-700 dark:bg-slate-950 dark:focus:bg-slate-900" />
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="max-h-[28rem] overflow-y-auto custom-scrollbar lg:max-h-none lg:flex-1">
           {committees.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())).length === 0 ? (
             <div className="p-8 text-center text-sm font-medium text-slate-500">No committees found.</div>
           ) : (
@@ -296,7 +303,7 @@ export default function CommitteeManagementPage() {
       </div>
 
       {/* Main Area */}
-      <div className="flex flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/20 overflow-y-auto custom-scrollbar">
+      <div className="flex min-w-0 flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/20">
         {isCreating ? (
            <div className="p-6 lg:p-10">
               <div className="mx-auto max-w-3xl">
@@ -408,7 +415,7 @@ export default function CommitteeManagementPage() {
               </div>
            </div>
         ) : selectedCommittee && detail ? (
-          <div className="flex h-full flex-col">
+          <div className="flex flex-col">
             {/* Committee Dashboard Header */}
             <div className="flex-shrink-0 border-b border-slate-100 bg-white/80 px-6 py-6 dark:border-slate-800 dark:bg-slate-900/80 backdrop-blur-md z-10">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -416,7 +423,15 @@ export default function CommitteeManagementPage() {
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{selectedCommittee.name}</h2>
                   <p className="mt-1.5 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400 leading-relaxed">{selectedCommittee.description || 'Structured society group with tracked responsibilities and communication.'}</p>
                 </div>
-                <div className="flex shrink-0 items-center justify-end gap-2 text-xs font-bold uppercase tracking-wider">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-xs font-bold uppercase tracking-wider">
+                  <button
+                    type="button"
+                    onClick={() => openCommitteeEditor(selectedCommittee.id)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm transition hover:bg-brand-500"
+                  >
+                    <PenSquare className="h-3.5 w-3.5" />
+                    Edit Committee
+                  </button>
                   <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{selectedCommittee.committee_type}</span>
                   <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 shadow-sm">{selectedCommittee.status}</span>
                 </div>
@@ -447,10 +462,24 @@ export default function CommitteeManagementPage() {
             </div>
 
             {/* Committee Dashboard Content Tabs Area */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30 p-6 md:p-8 dark:bg-slate-950/20">
+            <div className="bg-slate-50/30 p-6 md:p-8 dark:bg-slate-950/20">
 
             {activeTab === 'members' && (
               <div className="space-y-4 max-w-4xl mx-auto">
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-lg font-bold text-slate-900 dark:text-white">Committee members</p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Add existing residents, admins, or guards and update their roles from the editor.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openCommitteeEditor(selectedCommittee.id)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-500"
+                  >
+                    <Users className="h-4 w-4" />
+                    Manage Members
+                  </button>
+                </div>
                 {detail.members.map((member) => (
                   <div key={`${member.user_id}-${member.role_title}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-800/50">
                     <div className="flex items-center gap-4">

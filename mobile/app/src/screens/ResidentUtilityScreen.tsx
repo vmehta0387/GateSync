@@ -15,6 +15,10 @@ import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
 import { API_BASE_URL } from '../config/env';
 import {
+  fetchCommunicationConversations,
+  fetchCommunicationEvents,
+  fetchCommunicationPolls,
+  fetchCommunicationThread,
   fetchCommitteeDirectory,
   fetchBillingSummary,
   fetchImportantContacts,
@@ -29,10 +33,14 @@ import { colors } from '../theme';
 import type { ResidentActionRoute } from '../types/navigation';
 import type {
   CommitteeDirectoryItem,
+  CommunicationConversation,
+  CommunicationThreadMessage,
+  EventItem,
   ImportantContactPerson,
   ImportantServiceStaff,
   Invoice,
   NoticeItem,
+  PollItem,
   ResidentImportantContacts,
   ResidentFlat,
   ResidentStaffDirectoryItem,
@@ -49,11 +57,11 @@ const ROUTE_META: Record<ResidentActionRoute, { title: string; subtitle: string 
   },
   society: {
     title: 'Society',
-    subtitle: 'See linked flats, public committees, and the latest society updates in one place.',
+    subtitle: 'Reach the society desk fast, browse public committees, and catch the latest updates.',
   },
-  notices: {
-    title: 'Notices',
-    subtitle: 'Read society announcements, urgent alerts, and maintenance updates.',
+  communication: {
+    title: 'Resident Hub',
+    subtitle: 'Stay on top of notices, polls, events, direct updates, and shared communication from admin.',
   },
   myFlat: {
     title: 'My flat',
@@ -81,6 +89,10 @@ export function ResidentUtilityScreen({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [notices, setNotices] = useState<NoticeItem[]>([]);
+  const [polls, setPolls] = useState<PollItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [conversations, setConversations] = useState<CommunicationConversation[]>([]);
+  const [conversationThread, setConversationThread] = useState<CommunicationThreadMessage[]>([]);
   const [committees, setCommittees] = useState<CommitteeDirectoryItem[]>([]);
   const [staff, setStaff] = useState<ResidentStaffDirectoryItem[]>([]);
   const [importantContacts, setImportantContacts] = useState<ResidentImportantContacts>({
@@ -94,6 +106,20 @@ export function ResidentUtilityScreen({
   const [invoiceFilter, setInvoiceFilter] = useState<'All' | Invoice['status']>('All');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
+  const [selectedPoll, setSelectedPoll] = useState<PollItem | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<CommunicationConversation | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<SharedDocument | null>(null);
+  const [selectedCommitteeId, setSelectedCommitteeId] = useState<number | null>(null);
+  const [connectTab, setConnectTab] = useState<'notices' | 'polls' | 'events' | 'updates'>('notices');
+  const [expandedContactGroups, setExpandedContactGroups] = useState<Record<string, boolean>>({
+    managers: true,
+    admins: false,
+    security: true,
+    housekeeping: false,
+    plumber: false,
+    electrician: false,
+  });
 
   const getFailureMessage = (...responses: unknown[]) => {
     for (const response of responses) {
@@ -126,34 +152,57 @@ export function ResidentUtilityScreen({
     }
 
     if (route === 'society') {
-      const [flatsRes, committeesRes, noticesRes, contactsRes] = await Promise.all([
+      const [flatsRes, committeesRes, contactsRes] = await Promise.all([
         fetchResidentFlats(),
         fetchCommitteeDirectory(),
-        fetchNotices(),
         fetchImportantContacts(),
       ]);
 
       if (flatsRes.success) setFlats(flatsRes.flats || []);
       if (committeesRes.success) setCommittees(committeesRes.committees || []);
-      if (noticesRes.success) setNotices(noticesRes.notices || []);
       if (contactsRes.success) {
         setImportantContacts(contactsRes.contacts || { admins: [], managers: [], service_staff: [] });
       }
 
-      if (!flatsRes.success || !committeesRes.success || !noticesRes.success || !contactsRes.success) {
-        setMessage(getFailureMessage(flatsRes, committeesRes, noticesRes, contactsRes) || 'Unable to load society overview.');
+      if (!flatsRes.success || !committeesRes.success || !contactsRes.success) {
+        setMessage(getFailureMessage(flatsRes, committeesRes, contactsRes) || 'Unable to load society overview.');
       }
       setRefreshing(false);
       return;
     }
 
-    if (route === 'notices') {
-      const response = await fetchNotices();
-      if (response.success) {
-        setNotices(response.notices || []);
-      } else {
-        setNotices([]);
-        setMessage(getFailureMessage(response) || 'Unable to load notices.');
+    if (route === 'communication') {
+      const [noticesRes, pollsRes, eventsRes, conversationsRes, documentsRes] = await Promise.all([
+        fetchNotices(),
+        fetchCommunicationPolls(),
+        fetchCommunicationEvents(),
+        fetchCommunicationConversations(),
+        fetchSharedDocuments(),
+      ]);
+
+      if (noticesRes.success) setNotices(noticesRes.notices || []);
+      else setNotices([]);
+      if (pollsRes.success) setPolls(pollsRes.polls || []);
+      else setPolls([]);
+      if (eventsRes.success) setEvents(eventsRes.events || []);
+      else setEvents([]);
+      if (conversationsRes.success) setConversations(conversationsRes.conversations || []);
+      else setConversations([]);
+      if (documentsRes.success) setDocuments(documentsRes.documents || []);
+      else setDocuments([]);
+
+      const successfulSections = [
+        noticesRes.success,
+        pollsRes.success,
+        eventsRes.success,
+        conversationsRes.success,
+        documentsRes.success,
+      ].filter(Boolean).length;
+
+      if (successfulSections === 0) {
+        setMessage(getFailureMessage(noticesRes, pollsRes, eventsRes, conversationsRes, documentsRes) || 'Unable to load Resident Hub.');
+      } else if (successfulSections < 5) {
+        setMessage('Some communication sections are still loading or not available yet.');
       }
       setRefreshing(false);
       return;
@@ -219,7 +268,101 @@ export function ResidentUtilityScreen({
     () => invoices.find((invoice) => invoice.id === selectedInvoiceId) || null,
     [invoices, selectedInvoiceId],
   );
+  const selectedCommittee = useMemo(
+    () => committees.find((committee) => committee.id === selectedCommitteeId) || null,
+    [committees, selectedCommitteeId],
+  );
   const insideVisitors = useMemo(() => logs.filter((log) => log.status === 'CheckedIn'), [logs]);
+  const importantNumberGroups = useMemo(() => {
+    const groups: Array<{
+      key: string;
+      title: string;
+      entries: Array<{ id: string | number; name: string; subtitle: string; phone_number: string; badge?: string }>;
+    }> = [];
+
+    if (importantContacts.managers.length) {
+      groups.push({
+        key: 'managers',
+        title: 'Society manager',
+        entries: importantContacts.managers.map((contact) => ({
+          id: contact.id,
+          name: contact.name,
+          subtitle: contact.label || contact.role || 'Society manager',
+          phone_number: contact.phone_number,
+        })),
+      });
+    }
+
+    if (importantContacts.admins.length) {
+      groups.push({
+        key: 'admins',
+        title: 'Society admin',
+        entries: importantContacts.admins.map((contact) => ({
+          id: contact.id,
+          name: contact.name,
+          subtitle: contact.label || contact.role || 'Society admin',
+          phone_number: contact.phone_number,
+        })),
+      });
+    }
+
+    const staffGroups: Array<{ key: string; title: string; type: ImportantServiceStaff['type'] }> = [
+      { key: 'security', title: 'Security', type: 'Security' },
+      { key: 'housekeeping', title: 'Housekeeping', type: 'Cleaner' },
+      { key: 'plumber', title: 'Plumber', type: 'Plumber' },
+      { key: 'electrician', title: 'Electrician', type: 'Electrician' },
+    ];
+
+    staffGroups.forEach((staffGroup) => {
+      const contacts = importantContacts.service_staff.filter((member) => member.type === staffGroup.type);
+      if (!contacts.length) {
+        return;
+      }
+
+      groups.push({
+        key: staffGroup.key,
+        title: staffGroup.title,
+        entries: contacts.map((contact) => ({
+          id: contact.id,
+          name: contact.name,
+          subtitle: `${contact.assignment_scope === 'SOCIETY' ? 'Society-wide support' : 'Assigned support'}${contact.shift_timing ? ` / ${contact.shift_timing}` : ''}`,
+          phone_number: contact.phone_number,
+          badge: contact.type === 'Cleaner' ? 'Housekeeping' : contact.type,
+        })),
+      });
+    });
+
+    return groups;
+  }, [importantContacts]);
+
+  const openConversation = useCallback(async (conversation: CommunicationConversation) => {
+    setSelectedConversation(conversation);
+    const response = await fetchCommunicationThread(conversation.resident_id);
+    if (response.success) {
+      setConversationThread(response.messages || []);
+      return;
+    }
+
+    setConversationThread([]);
+    const failureMessage = 'message' in response ? response.message : 'Please try again.';
+    Alert.alert('Unable to load update', failureMessage || 'Please try again.');
+  }, []);
+
+  useEffect(() => {
+    setSelectedCommitteeId(null);
+  }, [route]);
+
+  useEffect(() => {
+    if (route !== 'communication') {
+      setConnectTab('notices');
+      setSelectedNotice(null);
+      setSelectedPoll(null);
+      setSelectedEvent(null);
+      setSelectedConversation(null);
+      setSelectedDocument(null);
+      setConversationThread([]);
+    }
+  }, [route]);
 
   return (
     <View style={styles.screen}>
@@ -379,98 +522,225 @@ export function ResidentUtilityScreen({
 
         {route === 'society' ? (
           <>
-            <Section title="Linked flats">
-              {flats.length ? (
-                flats.map((flat) => (
-                  <View key={flat.flat_id} style={styles.simpleCard}>
-                    <Text style={styles.itemTitle}>{flat.block_name}-{flat.flat_number}</Text>
-                    <Text style={styles.itemMeta}>{flat.type}</Text>
-                  </View>
-                ))
-              ) : (
-                <EmptyState title="No flats linked" detail="Ask your admin to map your account to the correct apartment." />
-              )}
-            </Section>
-
             <Section title="Important numbers">
-              {importantContacts.admins.length || importantContacts.managers.length || importantContacts.service_staff.length ? (
-                <>
-                  {importantContacts.managers.length ? (
-                    <ContactGroup
-                      title="Society manager"
-                      contacts={importantContacts.managers}
-                      onCall={handleCall}
-                    />
-                  ) : null}
-                  {importantContacts.admins.length ? (
-                    <ContactGroup
-                      title="Society admin"
-                      contacts={importantContacts.admins}
-                      onCall={handleCall}
-                    />
-                  ) : null}
-                  {(['Security', 'Cleaner', 'Plumber', 'Electrician'] as const).map((staffType) => {
-                    const filteredStaff = importantContacts.service_staff.filter((member) => member.type === staffType);
-                    if (!filteredStaff.length) {
-                      return null;
-                    }
-
-                    return (
-                      <ServiceStaffGroup
-                        key={staffType}
-                        title={staffType === 'Cleaner' ? 'Housekeeping' : staffType}
-                        contacts={filteredStaff}
-                        onCall={handleCall}
-                      />
-                    );
-                  })}
-                </>
+              {importantNumberGroups.length ? (
+                importantNumberGroups.map((group) => (
+                  <AccordionGroup
+                    key={group.key}
+                    title={group.title}
+                    count={group.entries.length}
+                    expanded={Boolean(expandedContactGroups[group.key])}
+                    onToggle={() => setExpandedContactGroups((current) => ({ ...current, [group.key]: !current[group.key] }))}
+                  >
+                    {group.entries.map((entry) => (
+                      <View key={`${group.key}-${entry.id}`} style={styles.contactCard}>
+                        <View style={styles.contactTopRow}>
+                          <View style={styles.copy}>
+                            <Text style={styles.contactName}>{entry.name}</Text>
+                            <Text style={styles.contactRole}>{entry.subtitle}</Text>
+                          </View>
+                          {entry.badge ? <Badge label={entry.badge} tone="info" /> : null}
+                        </View>
+                        <View style={styles.phoneRow}>
+                          <Text style={styles.phoneValue}>{entry.phone_number || 'Number not shared'}</Text>
+                          <Pressable style={styles.callButton} onPress={() => void handleCall(entry.phone_number, entry.name)}>
+                            <Text style={styles.callButtonText}>Call</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </AccordionGroup>
+                ))
               ) : (
                 <EmptyState title="No important contacts shared yet" detail="Admin, manager, and service team contact numbers will appear here once configured." />
               )}
             </Section>
 
-            <Section title="Committee directory">
-              {committees.length ? (
-                committees.map((committee) => (
-                  <View key={committee.id} style={styles.listCard}>
-                    <View style={styles.rowBetween}>
-                      <View style={styles.copy}>
-                        <Text style={styles.itemTitle}>{committee.name}</Text>
-                        <Text style={styles.itemMeta}>{committee.committee_type} / {committee.member_count} member(s)</Text>
-                      </View>
-                      <Badge label={committee.status} tone="info" />
+            {selectedCommittee ? (
+              <Section title={selectedCommittee.name}>
+                <Pressable onPress={() => setSelectedCommitteeId(null)} style={styles.backButton}>
+                  <Text style={styles.backButtonText}>Back to committees</Text>
+                </Pressable>
+                <View style={styles.listCard}>
+                  <View style={styles.rowBetween}>
+                    <View style={styles.copy}>
+                      <Text style={styles.itemTitle}>{selectedCommittee.committee_type}</Text>
+                      <Text style={styles.itemMeta}>{selectedCommittee.member_count} member(s)</Text>
                     </View>
-                    {committee.members.slice(0, 4).map((member) => (
-                      <Text key={member.id} style={styles.memberLine}>
-                        {member.role_title}: {member.name}{member.is_primary_contact ? ' (primary)' : ''}
-                      </Text>
-                    ))}
+                    <Badge label={selectedCommittee.status} tone="info" />
                   </View>
-                ))
-              ) : (
-                <EmptyState title="No public committees yet" detail="Public committee names and roles will appear here once published." />
-              )}
-            </Section>
-
-            <Section title="Latest notices">
-              {notices.length ? (
-                notices.slice(0, 5).map((notice) => <NoticeCard key={notice.id} notice={notice} compact onPress={() => setSelectedNotice(notice)} />)
-              ) : (
-                <EmptyState title="No notices yet" detail="Society announcements will show up here when published." />
-              )}
-            </Section>
+                  {selectedCommittee.description ? <Text style={styles.noticeContent}>{selectedCommittee.description}</Text> : null}
+                </View>
+                <View style={styles.committeeMemberList}>
+                  {selectedCommittee.members.map((member) => (
+                    <View key={member.id} style={styles.committeeMemberCard}>
+                      <View style={styles.rowBetween}>
+                        <View style={styles.copy}>
+                          <Text style={styles.contactName}>{member.name}</Text>
+                          <Text style={styles.contactRole}>{member.is_primary_contact ? 'Primary contact' : 'Committee member'}</Text>
+                        </View>
+                        <View style={styles.noticeBadges}>
+                          {member.is_primary_contact ? <Badge label="Primary" tone="info" /> : null}
+                          {member.status ? <Badge label={member.status} tone="success" /> : null}
+                        </View>
+                      </View>
+                      <Text style={styles.itemMeta}>
+                        {member.block_name && member.flat_number ? `Flat: ${member.block_name}-${member.flat_number}` : 'Flat not shared'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </Section>
+            ) : (
+              <Section title="Committee directory">
+                {committees.length ? (
+                  committees.map((committee) => (
+                    <Pressable key={committee.id} style={styles.listCard} onPress={() => setSelectedCommitteeId(committee.id)}>
+                      <View style={styles.rowBetween}>
+                        <View style={styles.copy}>
+                          <Text style={styles.itemTitle}>{committee.name}</Text>
+                          <Text style={styles.itemMeta}>{committee.committee_type} / {committee.member_count} member(s)</Text>
+                        </View>
+                        <Badge label={committee.status} tone="info" />
+                      </View>
+                      <Text numberOfLines={2} style={styles.itemMeta}>{committee.description || 'Tap to see all committee members and roles.'}</Text>
+                      <Text style={styles.committeeOpenHint}>Open member details</Text>
+                    </Pressable>
+                  ))
+                ) : (
+                  <EmptyState title="No public committees yet" detail="Public committee names and roles will appear here once published." />
+                )}
+              </Section>
+            )}
           </>
         ) : null}
 
-        {route === 'notices' ? (
-          <Section title="All notices">
-            {notices.length ? (
-              notices.map((notice) => <NoticeCard key={notice.id} notice={notice} onPress={() => setSelectedNotice(notice)} />)
-            ) : (
-              <EmptyState title="No notices published" detail="Admin announcements and urgent updates will appear here." />
-            )}
-          </Section>
+        {route === 'communication' ? (
+          <>
+            <View style={styles.filterRow}>
+              {([
+                { key: 'notices', label: 'Notices' },
+                { key: 'polls', label: 'Polls' },
+                { key: 'events', label: 'Events' },
+                { key: 'updates', label: 'Updates' },
+              ] as const).map((tab) => (
+                <Pressable
+                  key={tab.key}
+                  onPress={() => setConnectTab(tab.key)}
+                  style={[styles.filterChip, connectTab === tab.key ? styles.filterChipActive : null]}
+                >
+                  <Text style={[styles.filterChipText, connectTab === tab.key ? styles.filterChipTextActive : null]}>
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {connectTab === 'notices' ? (
+              <Section title="Society notices">
+                {notices.length ? (
+                  notices.map((notice) => <NoticeCard key={notice.id} notice={notice} onPress={() => setSelectedNotice(notice)} />)
+                ) : (
+                  <EmptyState title="No notices published" detail="Admin announcements and urgent updates will appear here." />
+                )}
+              </Section>
+            ) : null}
+
+            {connectTab === 'polls' ? (
+              <Section title="Community polls">
+                {polls.length ? (
+                  polls.map((poll) => (
+                    <Pressable key={poll.id} style={styles.listCard} onPress={() => setSelectedPoll(poll)}>
+                      <View style={styles.rowBetween}>
+                        <View style={styles.copy}>
+                          <Text style={styles.itemTitle}>{poll.title}</Text>
+                          <Text style={styles.itemMeta}>
+                            {poll.poll_type === 'YesNo' ? 'Yes / No' : 'Single choice'} / {poll.response_count} response(s)
+                          </Text>
+                        </View>
+                        <Badge label={poll.status} tone={poll.status === 'Live' ? 'success' : 'info'} />
+                      </View>
+                      {poll.description ? <Text numberOfLines={2} style={styles.noticeContent}>{poll.description}</Text> : null}
+                      <Text style={styles.itemMeta}>
+                        {poll.starts_at ? `Starts ${formatDateTime(poll.starts_at)}` : 'Available now'}
+                        {poll.ends_at ? ` / Ends ${formatDateTime(poll.ends_at)}` : ''}
+                      </Text>
+                    </Pressable>
+                  ))
+                ) : (
+                  <EmptyState title="No polls live right now" detail="Resident voting and quick opinion polls will appear here once published." />
+                )}
+              </Section>
+            ) : null}
+
+            {connectTab === 'events' ? (
+              <Section title="Community events">
+                {events.length ? (
+                  events.map((event) => (
+                    <Pressable key={event.id} style={styles.listCard} onPress={() => setSelectedEvent(event)}>
+                      <View style={styles.rowBetween}>
+                        <View style={styles.copy}>
+                          <Text style={styles.itemTitle}>{event.title}</Text>
+                          <Text style={styles.itemMeta}>{event.venue || 'Society venue'} / {formatDateTime(event.start_at || null)}</Text>
+                        </View>
+                        <Badge label={event.status} tone="info" />
+                      </View>
+                      {event.description ? <Text numberOfLines={2} style={styles.noticeContent}>{event.description}</Text> : null}
+                      <Text style={styles.itemMeta}>
+                        Going {event.rsvp_summary?.Going || 0} / Maybe {event.rsvp_summary?.Maybe || 0} / Not going {event.rsvp_summary?.NotGoing || 0}
+                      </Text>
+                    </Pressable>
+                  ))
+                ) : (
+                  <EmptyState title="No upcoming events" detail="Community meetups and admin-published events will appear here." />
+                )}
+              </Section>
+            ) : null}
+
+            {connectTab === 'updates' ? (
+              <>
+                <Section title="Direct updates">
+                  {conversations.length ? (
+                    conversations.map((conversation) => (
+                      <Pressable key={conversation.resident_id} style={styles.listCard} onPress={() => void openConversation(conversation)}>
+                        <View style={styles.rowBetween}>
+                          <View style={styles.copy}>
+                            <Text style={styles.itemTitle}>{conversation.last_subject || conversation.resident_name || 'Admin update'}</Text>
+                            <Text style={styles.itemMeta}>
+                              {conversation.last_created_at ? formatDateTime(conversation.last_created_at) : 'Latest message'}
+                            </Text>
+                          </View>
+                          {conversation.unread_count ? <Badge label={`${conversation.unread_count} new`} tone="warning" /> : null}
+                        </View>
+                        <Text numberOfLines={2} style={styles.noticeContent}>{conversation.last_message || 'Open thread to read the update.'}</Text>
+                      </Pressable>
+                    ))
+                  ) : (
+                    <EmptyState title="No direct updates yet" detail="Private admin messages and thread updates will appear here." />
+                  )}
+                </Section>
+
+                <Section title="Shared files">
+                  {documents.length ? (
+                    documents.map((document) => (
+                      <Pressable key={document.id} style={styles.listCard} onPress={() => setSelectedDocument(document)}>
+                        <View style={styles.rowBetween}>
+                          <View style={styles.copy}>
+                            <Text style={styles.itemTitle}>{document.title}</Text>
+                            <Text style={styles.itemMeta}>{document.category} / {document.created_by_name || 'Admin'}</Text>
+                          </View>
+                          {document.is_pinned ? <Badge label="Pinned" tone="info" /> : null}
+                        </View>
+                        {document.description ? <Text numberOfLines={2} style={styles.noticeContent}>{document.description}</Text> : null}
+                      </Pressable>
+                    ))
+                  ) : (
+                    <EmptyState title="No update files shared" detail="Circulars, forms, and related files will appear here." />
+                  )}
+                </Section>
+              </>
+            ) : null}
+          </>
         ) : null}
 
         {route === 'myFlat' ? (
@@ -635,6 +905,153 @@ export function ResidentUtilityScreen({
           </View>
         </View>
       </Modal>
+
+      <Modal visible={Boolean(selectedPoll)} transparent animationType="slide" onRequestClose={() => setSelectedPoll(null)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.copy}>
+                <Text style={styles.modalTitle}>{selectedPoll?.title || 'Poll detail'}</Text>
+                <Text style={styles.itemMeta}>
+                  {selectedPoll?.starts_at ? `Starts ${formatDateTime(selectedPoll.starts_at)}` : 'Live now'}
+                  {selectedPoll?.ends_at ? ` / Ends ${formatDateTime(selectedPoll.ends_at)}` : ''}
+                </Text>
+              </View>
+              <Pressable onPress={() => setSelectedPoll(null)} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            {selectedPoll ? (
+              <ScrollView contentContainerStyle={styles.modalBody}>
+                <View style={styles.noticeBadgeRow}>
+                  <Badge label={selectedPoll.status} tone={selectedPoll.status === 'Live' ? 'success' : 'info'} />
+                  <Badge label={selectedPoll.poll_type === 'YesNo' ? 'Yes / No' : 'Single choice'} tone="info" />
+                </View>
+                {selectedPoll.description ? <Text style={styles.noticeDetailText}>{selectedPoll.description}</Text> : null}
+                <View style={styles.modalSection}>
+                  <Text style={styles.subSectionTitle}>Options</Text>
+                  {selectedPoll.options.map((option, index) => (
+                    <View key={`${selectedPoll.id}-option-${index}`} style={styles.lineItemRow}>
+                      <Text style={styles.itemMeta}>{option.option_text}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.itemMeta}>{selectedPoll.response_count} response(s) recorded</Text>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(selectedEvent)} transparent animationType="slide" onRequestClose={() => setSelectedEvent(null)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.copy}>
+                <Text style={styles.modalTitle}>{selectedEvent?.title || 'Event detail'}</Text>
+                <Text style={styles.itemMeta}>{selectedEvent?.venue || 'Society venue'}</Text>
+              </View>
+              <Pressable onPress={() => setSelectedEvent(null)} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            {selectedEvent ? (
+              <ScrollView contentContainerStyle={styles.modalBody}>
+                <View style={styles.noticeBadgeRow}>
+                  <Badge label={selectedEvent.status} tone="info" />
+                  {selectedEvent.rsvp_required ? <Badge label="RSVP enabled" tone="success" /> : null}
+                </View>
+                {selectedEvent.description ? <Text style={styles.noticeDetailText}>{selectedEvent.description}</Text> : null}
+                <View style={styles.modalSection}>
+                  <Text style={styles.subSectionTitle}>Schedule</Text>
+                  <Text style={styles.itemMeta}>Starts: {formatDateTime(selectedEvent.start_at || null)}</Text>
+                  {selectedEvent.end_at ? <Text style={styles.itemMeta}>Ends: {formatDateTime(selectedEvent.end_at)}</Text> : null}
+                </View>
+                <View style={styles.modalSection}>
+                  <Text style={styles.subSectionTitle}>RSVP snapshot</Text>
+                  <Text style={styles.itemMeta}>Going: {selectedEvent.rsvp_summary?.Going || 0}</Text>
+                  <Text style={styles.itemMeta}>Maybe: {selectedEvent.rsvp_summary?.Maybe || 0}</Text>
+                  <Text style={styles.itemMeta}>Not going: {selectedEvent.rsvp_summary?.NotGoing || 0}</Text>
+                </View>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(selectedConversation)} transparent animationType="slide" onRequestClose={() => setSelectedConversation(null)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.copy}>
+                <Text style={styles.modalTitle}>{selectedConversation?.last_subject || 'Admin update'}</Text>
+                <Text style={styles.itemMeta}>{selectedConversation?.resident_name || 'Admin thread'}</Text>
+              </View>
+              <Pressable onPress={() => setSelectedConversation(null)} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              {conversationThread.length ? (
+                conversationThread.map((entry) => (
+                  <View key={entry.id} style={styles.listCard}>
+                    <View style={styles.rowBetween}>
+                      <View style={styles.copy}>
+                        <Text style={styles.itemTitle}>{entry.sender_name}</Text>
+                        <Text style={styles.itemMeta}>{formatDateTime(entry.created_at || null)}</Text>
+                      </View>
+                      <Badge label={entry.priority} tone={entry.priority === 'Emergency' ? 'danger' : entry.priority === 'High' ? 'warning' : 'info'} />
+                    </View>
+                    {entry.subject ? <Text style={styles.contactRole}>{entry.subject}</Text> : null}
+                    <Text style={styles.noticeContent}>{entry.content}</Text>
+                    {entry.attachments?.length ? (
+                      <View style={styles.modalSection}>
+                        <Text style={styles.subSectionTitle}>Attachments</Text>
+                        {entry.attachments.map((attachment, index) => {
+                          const url = attachment.url || attachment.file_path || '';
+                          return (
+                            <Pressable key={`${entry.id}-attachment-${index}`} style={styles.secondaryButton} onPress={() => void openLink(url, attachment.file_name || 'Thread attachment')}>
+                              <Text style={styles.secondaryButtonText}>{attachment.file_name || `Attachment ${index + 1}`}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+                  </View>
+                ))
+              ) : (
+                <EmptyState title="No thread details yet" detail="New admin messages will appear here once available." />
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(selectedDocument)} transparent animationType="slide" onRequestClose={() => setSelectedDocument(null)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.copy}>
+                <Text style={styles.modalTitle}>{selectedDocument?.title || 'Update detail'}</Text>
+                <Text style={styles.itemMeta}>{selectedDocument?.category || 'Document'} / {selectedDocument?.created_by_name || 'Admin'}</Text>
+              </View>
+              <Pressable onPress={() => setSelectedDocument(null)} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            {selectedDocument ? (
+              <ScrollView contentContainerStyle={styles.modalBody}>
+                {selectedDocument.description ? <Text style={styles.noticeDetailText}>{selectedDocument.description}</Text> : null}
+                <View style={styles.actionRow}>
+                  <Pressable style={styles.openButton} onPress={() => void openLink(selectedDocument.file_url, selectedDocument.title)}>
+                    <Text style={styles.openButtonText}>Open document</Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -681,70 +1098,29 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function ContactGroup({
+function AccordionGroup({
   title,
-  contacts,
-  onCall,
+  count,
+  expanded,
+  onToggle,
+  children,
 }: {
   title: string;
-  contacts: ImportantContactPerson[];
-  onCall: (phoneNumber: string, label: string) => Promise<void>;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <View style={styles.contactGroup}>
-      <Text style={styles.contactGroupTitle}>{title}</Text>
-      {contacts.map((contact) => (
-        <View key={`${title}-${contact.id}`} style={styles.contactCard}>
-          <View style={styles.contactTopRow}>
-            <View style={styles.copy}>
-              <Text style={styles.contactName}>{contact.name}</Text>
-              <Text style={styles.contactRole}>{contact.label || contact.role || title}</Text>
-            </View>
-          </View>
-          <View style={styles.phoneRow}>
-            <Text style={styles.phoneValue}>{contact.phone_number || 'Number not shared'}</Text>
-            <Pressable style={styles.callButton} onPress={() => void onCall(contact.phone_number, contact.name)}>
-              <Text style={styles.callButtonText}>Call</Text>
-            </Pressable>
-          </View>
+      <Pressable style={styles.contactGroupHeader} onPress={onToggle}>
+        <View style={styles.copy}>
+          <Text style={styles.contactGroupTitle}>{title}</Text>
+          <Text style={styles.itemMeta}>{count} contact(s)</Text>
         </View>
-      ))}
-    </View>
-  );
-}
-
-function ServiceStaffGroup({
-  title,
-  contacts,
-  onCall,
-}: {
-  title: string;
-  contacts: ImportantServiceStaff[];
-  onCall: (phoneNumber: string, label: string) => Promise<void>;
-}) {
-  return (
-    <View style={styles.contactGroup}>
-      <Text style={styles.contactGroupTitle}>{title}</Text>
-      {contacts.map((contact) => (
-        <View key={`${contact.type}-${contact.id}`} style={styles.contactCard}>
-          <View style={styles.contactTopRow}>
-            <View style={styles.copy}>
-              <Text style={styles.contactName}>{contact.name}</Text>
-              <Text style={styles.contactRole}>
-                {contact.assignment_scope === 'SOCIETY' ? 'Society-wide support' : 'Assigned support'}
-                {contact.shift_timing ? ` / ${contact.shift_timing}` : ''}
-              </Text>
-            </View>
-            <Badge label={contact.type} tone="info" />
-          </View>
-          <View style={styles.phoneRow}>
-            <Text style={styles.phoneValue}>{contact.phone_number || 'Number not shared'}</Text>
-            <Pressable style={styles.callButton} onPress={() => void onCall(contact.phone_number, contact.name)}>
-              <Text style={styles.callButtonText}>Call</Text>
-            </Pressable>
-          </View>
-        </View>
-      ))}
+        <Text style={styles.committeeOpenHint}>{expanded ? 'Hide' : 'Show'}</Text>
+      </Pressable>
+      {expanded ? children : null}
     </View>
   );
 }
@@ -1133,9 +1509,18 @@ const styles = StyleSheet.create({
   contactGroup: {
     gap: 10,
   },
+  contactGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceMuted,
+    padding: 14,
+  },
   contactGroupTitle: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
   },
   contactCard: {
@@ -1183,6 +1568,20 @@ const styles = StyleSheet.create({
     color: colors.primaryDeep,
     fontSize: 13,
     fontWeight: '800',
+  },
+  committeeOpenHint: {
+    color: colors.primaryDeep,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  committeeMemberList: {
+    gap: 10,
+  },
+  committeeMemberCard: {
+    borderRadius: 18,
+    backgroundColor: colors.surfaceMuted,
+    padding: 14,
+    gap: 8,
   },
   modalScrim: {
     flex: 1,

@@ -4,15 +4,19 @@ import {
   BookingPayload,
   BillingSummary,
   CommitteeDirectoryItem,
+  CommunicationConversation,
+  CommunicationThreadMessage,
   ComplaintCategory,
   ComplaintDetail,
   ComplaintPayload,
   ComplaintSummaryItem,
+  EventItem,
   Facility,
   FacilityBooking,
   FacilityMaintenanceBlock,
   Invoice,
   NoticeItem,
+  PollItem,
   ResidentFlat,
   ResidentImportantContacts,
   ResidentStaffDirectoryItem,
@@ -261,6 +265,42 @@ export async function fetchNotices() {
     return response.data;
   } catch (error) {
     return { success: false, message: getApiErrorMessage(error, 'Unable to load society notices.'), notices: [] };
+  }
+}
+
+export async function fetchCommunicationPolls() {
+  try {
+    const response = await api.get<{ success: boolean; polls: PollItem[] }>('/communication/polls');
+    return response.data;
+  } catch (error) {
+    return { success: false, message: getApiErrorMessage(error, 'Unable to load resident polls.'), polls: [] };
+  }
+}
+
+export async function fetchCommunicationEvents() {
+  try {
+    const response = await api.get<{ success: boolean; events: EventItem[] }>('/communication/events');
+    return response.data;
+  } catch (error) {
+    return { success: false, message: getApiErrorMessage(error, 'Unable to load community events.'), events: [] };
+  }
+}
+
+export async function fetchCommunicationConversations() {
+  try {
+    const response = await api.get<{ success: boolean; conversations: CommunicationConversation[] }>('/communication/messages');
+    return response.data;
+  } catch (error) {
+    return { success: false, message: getApiErrorMessage(error, 'Unable to load admin updates.'), conversations: [] };
+  }
+}
+
+export async function fetchCommunicationThread(userId: number) {
+  try {
+    const response = await api.get<{ success: boolean; messages: CommunicationThreadMessage[] }>(`/communication/messages/thread/${userId}`);
+    return response.data;
+  } catch (error) {
+    return { success: false, message: getApiErrorMessage(error, 'Unable to load update thread.'), messages: [] };
   }
 }
 

@@ -269,6 +269,8 @@ export type CommitteeMember = {
   phone_number: string;
   email: string;
   user_role: string;
+  block_name?: string;
+  flat_number?: string;
   role_title: string;
   permission_scope: string;
   permissions: Record<string, boolean>;
@@ -312,6 +314,68 @@ export type NoticeItem = {
   created_at?: string | null;
   created_by_name?: string;
   read_count?: number;
+};
+
+export type CommunicationConversation = {
+  resident_id: number;
+  resident_name: string;
+  resident_phone: string;
+  block_name: string;
+  flat_number: string;
+  last_message: string;
+  last_subject?: string;
+  last_priority?: string;
+  last_created_at?: string | null;
+  unread_count: number;
+};
+
+export type CommunicationThreadMessage = {
+  id: number;
+  sender_id: number;
+  receiver_id: number;
+  sender_name: string;
+  receiver_name: string;
+  subject: string;
+  content: string;
+  priority: string;
+  attachments: Array<{ file_name?: string; file_path: string; url?: string }>;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at?: string | null;
+};
+
+export type PollItem = {
+  id: number;
+  title: string;
+  description: string;
+  poll_type: string;
+  target_scope: string;
+  target_filters: Record<string, unknown>;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  status: string;
+  created_at?: string | null;
+  options: Array<{ id?: number; option_text: string }>;
+  response_count: number;
+};
+
+export type EventItem = {
+  id: number;
+  title: string;
+  description: string;
+  venue: string;
+  target_scope: string;
+  target_filters: Record<string, unknown>;
+  start_at?: string | null;
+  end_at?: string | null;
+  rsvp_required: boolean;
+  status: string;
+  created_at?: string | null;
+  rsvp_summary?: {
+    Going?: number;
+    Maybe?: number;
+    NotGoing?: number;
+  };
 };
 
 export type SharedDocument = {

@@ -10,13 +10,13 @@ router.get('/hub', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationCon
 router.get('/targets', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.getTargets);
 router.get('/messages', communicationController.getMessages);
 router.post('/messages', communicationController.sendMessage);
-router.get('/messages/thread/:userId', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.getThreadMessages);
+router.get('/messages/thread/:userId', communicationController.getThreadMessages);
 router.get('/notices', communicationController.getNotices);
 router.post('/notices', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.sendBroadcast);
 router.post('/send', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.sendBroadcast);
-router.get('/polls', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.getPolls);
+router.get('/polls', communicationController.getPolls);
 router.post('/polls', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.createPoll);
-router.get('/events', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.getEvents);
+router.get('/events', communicationController.getEvents);
 router.post('/events', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.createEvent);
 router.get('/documents', communicationController.getDocuments);
 router.post('/documents', authorize('ADMIN', 'SUPERADMIN', 'MANAGER'), communicationController.createDocument);
