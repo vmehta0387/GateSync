@@ -16,8 +16,9 @@ mobile/guard-app/.env
 mobile/resident-app/.env
 firebase-service-account*.json
 service-account*.json
-google-service*.json
+google-service-account*.json
 *firebase-adminsdk*.json
+!mobile/app/google-services.json
 
 # logs
 *.log

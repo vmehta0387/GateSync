@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "726247040783",
+    "project_id": "gatesync-c9907",
+    "storage_bucket": "gatesync-c9907.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:726247040783:android:da4842598a8626b393007a",
+        "android_client_info": {
+          "package_name": "com.gatesync.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTI2LCUGP4hxkJ522bq9Hb_dyZ97-W_r4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
