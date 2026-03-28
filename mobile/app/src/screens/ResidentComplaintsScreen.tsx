@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
+import { API_BASE_URL } from '../config/env';
 import { subscribeToResidentComplaintUpdates } from '../lib/socket';
 import { useSession } from '../providers/SessionProvider';
 import {
@@ -40,6 +41,13 @@ export function ResidentComplaintsScreen() {
   const [closingReason, setClosingReason] = useState('');
   const [selectedMessageEntry, setSelectedMessageEntry] = useState<ComplaintDetail['messages'][number] | null>(null);
 
+  const closeTicketDetail = useCallback(() => {
+    setSelectedComplaintId(null);
+    setDetail(null);
+    setMessage('');
+    setClosingReason('');
+  }, []);
+
   const loadBase = useCallback(async () => {
     setRefreshing(true);
     const [flatsRes, categoriesRes, complaintsRes] = await Promise.all([
@@ -61,12 +69,9 @@ export function ResidentComplaintsScreen() {
     if (complaintsRes.success) {
       const nextComplaints = complaintsRes.complaints || [];
       setComplaints(nextComplaints);
-      if (!selectedComplaintId && nextComplaints[0]) {
-        setSelectedComplaintId(nextComplaints[0].id);
-      }
     }
     setRefreshing(false);
-  }, [selectedComplaintId]);
+  }, []);
 
   const loadDetail = useCallback(async (complaintId: number) => {
     const response = await fetchComplaintDetail(complaintId);
@@ -236,49 +241,80 @@ export function ResidentComplaintsScreen() {
           <Pressable onPress={() => void attachImage()} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>{uploading ? 'Uploading proof...' : 'Attach photo proof'}</Text>
           </Pressable>
-          {form.attachments.length ? <Text style={styles.helperText}>{form.attachments.length} attachment(s) added</Text> : null}
+          {form.attachments.length ? (
+            <AttachmentList
+              attachments={form.attachments}
+              onOpen={(attachment) => void openComplaintAttachment(attachment)}
+            />
+          ) : null}
           <Pressable onPress={() => void submitComplaint()} disabled={submitting || !form.flat_id || !form.category_id || !form.description.trim()} style={[styles.primaryButton, (submitting || !form.flat_id || !form.category_id || !form.description.trim()) ? styles.disabledButton : null]}>
             <Text style={styles.primaryButtonText}>{submitting ? 'Submitting...' : 'Submit Ticket'}</Text>
           </Pressable>
         </View>
 
         <View style={styles.panel}>
-          <Text style={styles.sectionTitle}>My tickets</Text>
+          <View style={styles.rowBetween}>
+            <View style={styles.cardCopy}>
+              <Text style={styles.sectionTitle}>My tickets</Text>
+              <Text style={styles.helperText}>Open any ticket to view its full details and conversation.</Text>
+            </View>
+            <Text style={styles.ticketCount}>{visibleComplaints.length}</Text>
+          </View>
           {visibleComplaints.length ? visibleComplaints.map((complaint) => (
-            <Pressable key={complaint.id} onPress={() => setSelectedComplaintId(complaint.id)} style={[styles.ticketCard, selectedComplaintId === complaint.id ? styles.ticketCardActive : null]}>
+            <Pressable key={complaint.id} onPress={() => setSelectedComplaintId(complaint.id)} style={styles.ticketCard}>
               <View style={styles.rowBetween}>
                 <View style={styles.cardCopy}>
-                  <Text style={styles.cardTitle}>{complaint.ticket_id}</Text>
-                  <Text style={styles.cardMeta}>{complaint.category_name} / {complaint.block_name}-{complaint.flat_number}</Text>
+                  <Text style={styles.cardTitle}>{buildComplaintSubject(complaint)}</Text>
+                  <Text style={styles.cardMeta}>{complaint.ticket_id} / {complaint.category_name} / {complaint.block_name}-{complaint.flat_number}</Text>
                 </View>
                 <View style={styles.badgeStack}>
                   <Badge label={complaint.priority} tone={getPriorityTone(complaint.priority)} />
                   <Badge label={complaint.status} tone={complaint.is_overdue ? 'danger' : complaint.status === 'Resolved' || complaint.status === 'Closed' ? 'success' : 'info'} />
                 </View>
               </View>
-              <Text style={styles.helperText}>{complaint.description}</Text>
+              <Text numberOfLines={2} style={styles.ticketPreview}>{complaint.description}</Text>
+              <View style={styles.ticketFooter}>
+                <Text style={styles.microText}>{formatDateTime(complaint.updated_at || complaint.created_at)}</Text>
+                {complaint.attachments?.length ? <Text style={styles.microText}>{complaint.attachments.length} attachment(s)</Text> : null}
+              </View>
             </Pressable>
           )) : (
             <EmptyState title="No complaints yet" detail="Your submitted tickets and their resolution status will appear here." />
           )}
         </View>
+      </ScrollView>
 
-        <View style={styles.panel}>
-          <Text style={styles.sectionTitle}>Ticket detail</Text>
+      <Modal visible={Boolean(selectedComplaintId)} animationType="slide" onRequestClose={closeTicketDetail}>
+        <View style={styles.detailScreen}>
+          <View style={styles.detailHeader}>
+            <Pressable onPress={closeTicketDetail} style={styles.backButton}>
+              <Text style={styles.backButtonText}>Back</Text>
+            </Pressable>
+            <Text style={styles.detailHeaderTitle}>Ticket detail</Text>
+            <View style={styles.backButtonSpacer} />
+          </View>
+
           {detail ? (
-            <>
+            <ScrollView contentContainerStyle={styles.detailContent}>
               <View style={styles.detailCard}>
                 <View style={styles.rowBetween}>
                   <View style={styles.cardCopy}>
-                    <Text style={styles.cardTitle}>{detail.complaint.ticket_id}</Text>
-                    <Text style={styles.cardMeta}>{detail.complaint.category_name}</Text>
+                    <Text style={styles.cardTitle}>{buildComplaintSubject(detail.complaint)}</Text>
+                    <Text style={styles.cardMeta}>{detail.complaint.ticket_id} / {detail.complaint.category_name}</Text>
                   </View>
                   <View style={styles.badgeStack}>
                     <Badge label={detail.complaint.priority} tone={getPriorityTone(detail.complaint.priority)} />
-                    <Badge label={detail.complaint.status} tone={detail.complaint.is_overdue ? 'danger' : 'info'} />
+                    <Badge label={detail.complaint.status} tone={detail.complaint.is_overdue ? 'danger' : detail.complaint.status === 'Resolved' || detail.complaint.status === 'Closed' ? 'success' : 'info'} />
                   </View>
                 </View>
-                <Text style={styles.helperText}>{detail.complaint.description}</Text>
+                <Text style={styles.detailBody}>{detail.complaint.description}</Text>
+                {detail.complaint.attachments?.length ? (
+                  <AttachmentList
+                    attachments={detail.complaint.attachments}
+                    onOpen={(attachment) => void openComplaintAttachment(attachment)}
+                  />
+                ) : null}
+                <Text style={styles.helperText}>Flat: {detail.complaint.block_name}-{detail.complaint.flat_number}</Text>
                 <Text style={styles.helperText}>Assigned: {detail.assignees.length ? detail.assignees.map((item) => item.name).join(', ') : 'Awaiting assignment'}</Text>
                 <Text style={styles.helperText}>Recurring flat issues: {detail.recurring_count}</Text>
                 {!['Resolved', 'Closed'].includes(detail.complaint.status) ? (
@@ -292,13 +328,21 @@ export function ResidentComplaintsScreen() {
               </View>
 
               <Text style={styles.subheading}>Conversation</Text>
-              {detail.messages.map((entry) => (
+              {detail.messages.length ? detail.messages.map((entry) => (
                 <Pressable key={entry.id} style={styles.timelineCard} onPress={() => setSelectedMessageEntry(entry)}>
-                  <Text style={styles.cardTitle}>{entry.sender_name}</Text>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.cardTitle}>{entry.sender_name}</Text>
+                    <Text style={styles.microText}>{formatDateTime(entry.created_at)}</Text>
+                  </View>
                   <Text style={styles.helperText}>{entry.message}</Text>
-                  <Text style={styles.microText}>{formatDateTime(entry.created_at)}</Text>
+                  {entry.attachments?.length ? (
+                    <AttachmentList
+                      attachments={entry.attachments}
+                      onOpen={(attachment) => void openComplaintAttachment(attachment)}
+                    />
+                  ) : null}
                 </Pressable>
-              ))}
+              )) : <EmptyState title="No updates yet" detail="Replies from society support will appear here." />}
 
               <TextInput value={message} onChangeText={setMessage} placeholder="Add follow-up message" placeholderTextColor={colors.textMuted} multiline style={styles.textArea} />
               <Pressable onPress={() => void submitMessage()} style={styles.secondaryButton}>
@@ -313,12 +357,14 @@ export function ResidentComplaintsScreen() {
                   <Text style={styles.microText}>{entry.changed_by_name} / {formatDateTime(entry.created_at)}</Text>
                 </View>
               ))}
-            </>
+            </ScrollView>
           ) : (
-            <EmptyState title="Select a ticket" detail="Choose a complaint above to see the conversation and status timeline." />
+            <View style={styles.emptyDetailState}>
+              <EmptyState title="Loading ticket" detail="Fetching the latest conversation and ticket status." />
+            </View>
           )}
         </View>
-      </ScrollView>
+      </Modal>
 
       <Modal visible={Boolean(selectedMessageEntry)} transparent animationType="slide" onRequestClose={() => setSelectedMessageEntry(null)}>
         <View style={styles.modalScrim}>
@@ -334,6 +380,12 @@ export function ResidentComplaintsScreen() {
             </View>
             <ScrollView contentContainerStyle={styles.modalBody}>
               <Text style={styles.modalMessageText}>{selectedMessageEntry?.message || ''}</Text>
+              {selectedMessageEntry?.attachments?.length ? (
+                <AttachmentList
+                  attachments={selectedMessageEntry.attachments}
+                  onOpen={(attachment) => void openComplaintAttachment(attachment)}
+                />
+              ) : null}
             </ScrollView>
           </View>
         </View>
@@ -346,6 +398,51 @@ function getPriorityTone(priority: 'Low' | 'Medium' | 'High') {
   if (priority === 'High') return 'danger';
   if (priority === 'Medium') return 'warning';
   return 'info';
+}
+
+function buildComplaintSubject(complaint: ComplaintSummaryItem) {
+  const description = (complaint.description || '').trim();
+  const firstLine = description.split(/\r?\n/)[0]?.trim() || '';
+  if (firstLine.length > 0) {
+    return firstLine.length > 56 ? `${firstLine.slice(0, 56).trimEnd()}...` : firstLine;
+  }
+  return `${complaint.category_name} issue`;
+}
+
+function resolveComplaintAttachmentUrl(attachment: { file_name?: string; file_path: string; url?: string }) {
+  if (attachment.url) {
+    return attachment.url;
+  }
+  if (attachment.file_path.startsWith('http://') || attachment.file_path.startsWith('https://')) {
+    return attachment.file_path;
+  }
+  return `${API_BASE_URL}${attachment.file_path.startsWith('/') ? attachment.file_path : `/${attachment.file_path}`}`;
+}
+
+async function openComplaintAttachment(attachment: { file_name?: string; file_path: string; url?: string }) {
+  try {
+    await Linking.openURL(resolveComplaintAttachmentUrl(attachment));
+  } catch {
+    Alert.alert('Unable to open attachment', attachment.file_name || 'Please try again.');
+  }
+}
+
+function AttachmentList({
+  attachments,
+  onOpen,
+}: {
+  attachments: Array<{ file_name?: string; file_path: string; url?: string }>;
+  onOpen: (attachment: { file_name?: string; file_path: string; url?: string }) => void;
+}) {
+  return (
+    <View style={styles.attachmentWrap}>
+      {attachments.map((attachment, index) => (
+        <Pressable key={`${attachment.file_path}-${index}`} onPress={() => onOpen(attachment)} style={styles.attachmentChip}>
+          <Text numberOfLines={1} style={styles.attachmentChipText}>{attachment.file_name || `Attachment ${index + 1}`}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -384,8 +481,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
   disabledButton: { opacity: 0.55 },
   input: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, color: colors.text, paddingHorizontal: 14, paddingVertical: 14, fontSize: 14 },
-  ticketCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6, borderWidth: 1, borderColor: 'transparent' },
-  ticketCardActive: { borderColor: '#bfd3ff', backgroundColor: '#eef4ff' },
+  ticketCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 8, borderWidth: 1, borderColor: colors.border },
   detailCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   timelineCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
@@ -395,9 +491,42 @@ const styles = StyleSheet.create({
   cardMeta: { color: colors.textMuted, fontSize: 12 },
   helperText: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   microText: { color: colors.textMuted, fontSize: 11 },
+  ticketPreview: { color: colors.text, fontSize: 13, lineHeight: 20 },
+  ticketFooter: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  ticketCount: { minWidth: 38, borderRadius: 999, backgroundColor: colors.surfaceMuted, color: colors.primaryDeep, textAlign: 'center', paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, fontWeight: '800' },
   subheading: { color: colors.text, fontSize: 15, fontWeight: '800', marginTop: 4 },
   closeButton: { borderRadius: 14, backgroundColor: '#fff1f1', borderWidth: 1, borderColor: '#efc6c6', alignItems: 'center', paddingVertical: 12 },
   closeButtonText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
+  detailScreen: { flex: 1, backgroundColor: colors.background },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  detailHeaderTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  backButton: { borderRadius: 14, backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8 },
+  backButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
+  backButtonSpacer: { width: 56 },
+  detailContent: { gap: 16, padding: 18, paddingBottom: 36 },
+  emptyDetailState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  detailBody: { color: colors.text, fontSize: 14, lineHeight: 22 },
+  attachmentWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  attachmentChip: {
+    maxWidth: '100%',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#bfd3ff',
+    backgroundColor: '#eef4ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  attachmentChipText: { color: colors.primaryDeep, fontSize: 12, fontWeight: '700' },
   modalScrim: { flex: 1, backgroundColor: 'rgba(10, 20, 35, 0.45)', justifyContent: 'flex-end' },
   modalCard: { maxHeight: '72%', borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: colors.surface, padding: 18, gap: 12 },
   modalTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },

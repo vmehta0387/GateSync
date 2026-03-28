@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormE
 import { AlertTriangle, Clock3, MessageSquare, PlusCircle, Ticket, Search, Filter, CheckCircle2, History, UserPlus, MoreVertical, Send, Paperclip, LayoutDashboard } from 'lucide-react';
 import { getStoredSession } from '@/lib/auth';
 import {
+  COMPLAINTS_API_BASE,
   type ComplaintCategory,
   type ComplaintDashboardSummary,
   type ComplaintDetailResponse,
@@ -34,7 +35,7 @@ export default function AdminComplaintsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', default_priority: 'Medium', sla_hours: '24' });
   const [updateForm, setUpdateForm] = useState({ status: 'Open', priority: 'Medium', resolution_note: '' });
-  const [messageForm, setMessageForm] = useState({ message: '', sender_staff_id: '', attachments: [] as Array<{ file_name?: string; file_path: string }> });
+  const [messageForm, setMessageForm] = useState({ message: '', sender_staff_id: '', attachments: [] as Array<{ file_name?: string; file_path: string; url?: string }> });
   const [assigneeDrafts, setAssigneeDrafts] = useState<Array<{ assignee_type: 'User' | 'Staff' | 'Committee'; user_id?: number; staff_id?: number; committee_id?: number; label: string }>>([]);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'interaction' | 'admin'>('interaction');
@@ -577,6 +578,22 @@ export default function AdminComplaintsPage() {
                           <div className="px-6 py-4 shadow-sm text-sm leading-relaxed border border-slate-200 bg-white rounded-3xl rounded-tl-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                             {detail.complaint.description}
                           </div>
+                          {detail.complaint.attachments.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 px-1">
+                              {detail.complaint.attachments.map((attachment, index) => (
+                                <a
+                                  key={`${attachment.file_path}-${index}`}
+                                  href={resolveComplaintAttachmentUrl(attachment)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-bold text-brand-700 transition hover:border-brand-300 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300"
+                                >
+                                  <Paperclip className="h-3.5 w-3.5" />
+                                  <span className="truncate">{attachment.file_name || `Attachment ${index + 1}`}</span>
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -608,6 +625,26 @@ export default function AdminComplaintsPage() {
                               <div className={`px-6 py-4 shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${isMine ? 'rounded-3xl rounded-tr-sm bg-brand-600 text-white' : 'rounded-3xl rounded-tl-sm border border-slate-200 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
                                 {message.message}
                               </div>
+                              {message.attachments.length > 0 && (
+                                <div className={`mt-3 flex flex-wrap gap-2 px-1 ${isMine ? 'justify-end' : ''}`}>
+                                  {message.attachments.map((attachment, index) => (
+                                    <a
+                                      key={`${attachment.file_path}-${index}`}
+                                      href={resolveComplaintAttachmentUrl(attachment)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                                        isMine
+                                          ? 'border-brand-300/50 bg-brand-500/15 text-white hover:bg-brand-500/25'
+                                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                                      }`}
+                                    >
+                                      <Paperclip className="h-3.5 w-3.5" />
+                                      <span className="truncate">{attachment.file_name || `Attachment ${index + 1}`}</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             {isMine && (
                               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-black text-brand-600 mt-1 dark:bg-brand-500/10 dark:text-brand-400">
@@ -647,7 +684,21 @@ export default function AdminComplaintsPage() {
                             <input type="file" className="hidden" onChange={handleUpload} />
                           </label>
                           {messageForm.attachments.length > 0 && (
-                            <span className="text-[10px] font-black text-brand-600 dark:text-brand-400">{messageForm.attachments.length} attached</span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[10px] font-black text-brand-600 dark:text-brand-400">{messageForm.attachments.length} attached</span>
+                              {messageForm.attachments.map((attachment, index) => (
+                                <a
+                                  key={`${attachment.file_path}-${index}`}
+                                  href={resolveComplaintAttachmentUrl(attachment)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex max-w-[180px] items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[10px] font-bold text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300"
+                                >
+                                  <Paperclip className="h-3 w-3" />
+                                  <span className="truncate">{attachment.file_name || `Attachment ${index + 1}`}</span>
+                                </a>
+                              ))}
+                            </div>
                           )}
                         </div>
                         <button type="submit" disabled={!messageForm.message.trim()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-6 py-2.5 text-sm font-black text-white shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-50">
@@ -831,4 +882,15 @@ export default function AdminComplaintsPage() {
       </div>
     </div>
   );
+}
+
+function resolveComplaintAttachmentUrl(attachment: { file_name?: string; file_path: string; url?: string }) {
+  if (attachment.url) {
+    return attachment.url;
+  }
+  if (attachment.file_path.startsWith('http://') || attachment.file_path.startsWith('https://')) {
+    return attachment.file_path;
+  }
+  const apiOrigin = new URL(COMPLAINTS_API_BASE).origin;
+  return `${apiOrigin}${attachment.file_path.startsWith('/') ? attachment.file_path : `/${attachment.file_path}`}`;
 }

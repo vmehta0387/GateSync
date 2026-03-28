@@ -24,7 +24,7 @@ export type ComplaintSummaryItem = {
   category_id: number | null;
   category_name: string;
   description: string;
-  attachments: Array<{ file_name?: string; file_path: string }>;
+  attachments: Array<{ file_name?: string; file_path: string; url?: string }>;
   status: 'Open' | 'InProgress' | 'OnHold' | 'Resolved' | 'Closed';
   priority: 'Low' | 'Medium' | 'High';
   sla_deadline: string | null;
@@ -58,7 +58,7 @@ export type ComplaintMessage = {
   sender_type: 'Resident' | 'Admin' | 'Staff' | 'System';
   sender_name: string;
   message: string;
-  attachments: Array<{ file_name?: string; file_path: string }>;
+  attachments: Array<{ file_name?: string; file_path: string; url?: string }>;
   created_at: string | null;
 };
 
@@ -154,7 +154,7 @@ export async function deleteComplaintsJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function uploadComplaintAttachment(file: File): Promise<{ success: boolean; file?: { file_name?: string; file_path: string }; message?: string }> {
+export async function uploadComplaintAttachment(file: File): Promise<{ success: boolean; file?: { file_name?: string; file_path: string; url?: string }; message?: string }> {
   const formData = new FormData();
   formData.append('file', file);
 

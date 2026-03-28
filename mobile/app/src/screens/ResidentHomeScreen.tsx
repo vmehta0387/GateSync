@@ -207,62 +207,6 @@ export function ResidentHomeScreen({
         </View>
 
         <View style={styles.mainPanel}>
-          <Text style={styles.panelTitle}>Society desk</Text>
-          <View style={styles.dualColumn}>
-            <View style={styles.infoColumn}>
-              <Text style={styles.infoTitle}>My flats</Text>
-              {flats.length ? flats.map((flat) => (
-                <View key={flat.flat_id} style={styles.simpleCard}>
-                  <Text style={styles.simpleTitle}>{flat.block_name}-{flat.flat_number}</Text>
-                  <Text style={styles.simpleMeta}>{flat.type}</Text>
-                </View>
-              )) : (
-                <EmptyState title="No flats linked" detail="Ask your society admin to map your resident account." />
-              )}
-            </View>
-
-            <View style={styles.infoColumn}>
-              <Text style={styles.infoTitle}>Committee directory</Text>
-              {committees.length ? committees.slice(0, 3).map((committee) => (
-                <View key={committee.id} style={styles.simpleCard}>
-                  <Text style={styles.simpleTitle}>{committee.name}</Text>
-                  {committee.members.slice(0, 3).map((member) => (
-                    <Text key={member.id} style={styles.simpleMeta}>
-                      {member.role_title}: {member.name}{member.is_primary_contact ? ' (primary)' : ''}
-                    </Text>
-                  ))}
-                </View>
-              )) : (
-                <EmptyState title="No public committees yet" detail="Once your society publishes committees, member names and roles will appear here." />
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.mainPanel}>
-          <Text style={styles.panelTitle}>Resident health</Text>
-          <View style={styles.dualColumn}>
-            <View style={styles.infoColumn}>
-              <Text style={styles.infoTitle}>Pending dues</Text>
-              {unpaidInvoices.length ? unpaidInvoices.slice(0, 3).map((invoice) => (
-                <InfoRow key={invoice.id} title={`${invoice.block_name}-${invoice.flat_number}`} detail={`${invoice.month_year} / Rs ${invoice.amount}`} meta={invoice.due_date || 'No due date'} badgeLabel="Unpaid" badgeTone="warning" />
-              )) : (
-                <EmptyState title="No pending dues" detail="Your unpaid invoices will show up here when billing is raised." />
-              )}
-            </View>
-
-            <View style={styles.infoColumn}>
-              <Text style={styles.infoTitle}>Open complaints</Text>
-              {openComplaints.length ? openComplaints.slice(0, 3).map((complaint) => (
-                <InfoRow key={complaint.id} title={complaint.ticket_id} detail={complaint.category_name} meta={complaint.description} badgeLabel={complaint.status} badgeTone={complaint.is_overdue ? 'danger' : 'info'} />
-              )) : (
-                <EmptyState title="No active complaints" detail="Raised issues that are still open will appear here." />
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.mainPanel}>
           <Text style={styles.panelTitle}>Live presence</Text>
           {activeVisitors.length ? activeVisitors.slice(0, 4).map((log) => (
             <InfoRow key={log.id} title={log.visitor_name} detail={`${log.purpose} / ${log.block_name}-${log.flat_number}`} meta={`Entered ${formatDateTime(log.entry_time)}`} badgeLabel="Inside" badgeTone="success" />
