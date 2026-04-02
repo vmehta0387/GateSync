@@ -23,6 +23,8 @@ function getInitialShiftForm() {
       shift_label: 'Day Shift',
       scheduled_start: '',
       scheduled_end: '',
+      recurrence_type: 'None',
+      recurrence_until: '',
       notes: '',
     };
   }
@@ -33,6 +35,8 @@ function getInitialShiftForm() {
     shift_label: params.get('shift_label') || 'Day Shift',
     scheduled_start: '',
     scheduled_end: '',
+    recurrence_type: 'None',
+    recurrence_until: '',
     notes: '',
   };
 }
@@ -42,6 +46,8 @@ const INITIAL_SHIFT_FORM = {
   shift_label: 'Day Shift',
   scheduled_start: '',
   scheduled_end: '',
+  recurrence_type: 'None',
+  recurrence_until: '',
   notes: '',
 };
 
@@ -299,7 +305,7 @@ export default function SecurityPage() {
             <ShieldCheck className="h-5 w-5 text-brand-500" />
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Create Security Shift</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Schedule from security staff directly. Guard login is optional for roster creation.</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Schedule from security staff directly. Guard login is optional, and recurring daily or weekly rosters can be created in one go.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -328,8 +334,33 @@ export default function SecurityPage() {
             <input value={shiftForm.shift_label} onChange={(event) => setShiftForm({ ...shiftForm, shift_label: event.target.value })} placeholder="Shift label" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900" />
             <input type="datetime-local" value={shiftForm.scheduled_start} onChange={(event) => setShiftForm({ ...shiftForm, scheduled_start: event.target.value })} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900" />
             <input type="datetime-local" value={shiftForm.scheduled_end} onChange={(event) => setShiftForm({ ...shiftForm, scheduled_end: event.target.value })} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900" />
+            <select
+              value={shiftForm.recurrence_type}
+              onChange={(event) => setShiftForm((current) => ({
+                ...current,
+                recurrence_type: event.target.value,
+                recurrence_until: event.target.value === 'None' ? '' : current.recurrence_until,
+              }))}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900"
+            >
+              <option value="None">Once only</option>
+              <option value="Daily">Repeat daily</option>
+              <option value="Weekly">Repeat weekly</option>
+            </select>
+            <input
+              type="date"
+              value={shiftForm.recurrence_until}
+              onChange={(event) => setShiftForm({ ...shiftForm, recurrence_until: event.target.value })}
+              disabled={shiftForm.recurrence_type === 'None'}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:disabled:bg-slate-800"
+            />
             <textarea value={shiftForm.notes} onChange={(event) => setShiftForm({ ...shiftForm, notes: event.target.value })} placeholder="Gate, beat area, special instruction..." className="h-24 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm md:col-span-2 dark:border-slate-800 dark:bg-slate-900" />
           </div>
+          {shiftForm.recurrence_type !== 'None' ? (
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              This will create {shiftForm.recurrence_type.toLowerCase()} shifts from the first selected shift until the repeat-until date.
+            </p>
+          ) : null}
           <div className="mt-4 flex justify-end">
             <button type="submit" className="rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-600">Create Shift</button>
           </div>

@@ -17,6 +17,13 @@ async function fetchUserWithSociety(userId) {
 
 // Fallback OTP storage when Twilio Verify is not configured.
 const otpStore = new Map();
+const TEST_BYPASS_NUMBERS = new Set([
+    '9876543219',
+    '7276838040',
+    '9988776655',
+    '7276500876',
+]);
+const TEST_BYPASS_OTP = '030407';
 
 exports.sendOtp = async (req, res) => {
     try {
@@ -39,6 +46,14 @@ exports.sendOtp = async (req, res) => {
 
         if (users[0].status && users[0].status !== 'ACTIVE') {
             return res.status(403).json({ success: false, message: 'This account is inactive. Please contact your society admin.' });
+        }
+
+        if (TEST_BYPASS_NUMBERS.has(phone_number)) {
+            otpStore.set(phone_number, TEST_BYPASS_OTP);
+            return res.status(200).json({
+                success: true,
+                message: 'Test OTP ready',
+            });
         }
 
         let otpMessage = 'OTP sent successfully';
@@ -82,7 +97,11 @@ exports.verifyOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Phone number and OTP are required' });
         }
 
-        if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+        if (TEST_BYPASS_NUMBERS.has(phone_number)) {
+            if (String(otp).trim() !== TEST_BYPASS_OTP) {
+                return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
+            }
+        } else if (process.env.TWILIO_VERIFY_SERVICE_SID) {
             const verifyResult = await checkVerification({ to: phone_number, code: otp });
             if (!verifyResult.success || !verifyResult.valid) {
                 return res.status(401).json({ success: false, message: verifyResult.message || 'Invalid or expired OTP' });

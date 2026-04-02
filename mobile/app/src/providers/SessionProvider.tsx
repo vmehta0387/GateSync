@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getBiometricSupport, promptForBiometricUnlock } from '../lib/biometrics';
 import { setApiTokenGetter } from '../lib/api';
 import { unregisterPushRegistration } from '../lib/notifications';
 import { clearStoredSession, readBiometricSettings, readStoredSession, writeStoredSession } from '../lib/storage';
+import { fetchCurrentUser } from '../services/auth';
 import { StoredSession } from '../types/auth';
 
 type SessionContextValue = {
@@ -13,6 +14,7 @@ type SessionContextValue = {
   signIn: (nextSession: StoredSession) => Promise<void>;
   signOut: () => Promise<void>;
   unlockSavedSession: () => Promise<boolean>;
+  refreshSession: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -22,6 +24,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StoredSession | null>(null);
   const [biometricLocked, setBiometricLocked] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
+
+  const refreshStoredSession = useCallback(async (baseSession: StoredSession | null) => {
+    if (!baseSession?.token) {
+      return;
+    }
+
+    setApiTokenGetter(() => baseSession.token || null);
+    const response = await fetchCurrentUser();
+    if (!response.success || !response.user) {
+      return;
+    }
+
+    const nextSession: StoredSession = {
+      ...baseSession,
+      user: response.user,
+    };
+    setSession(nextSession);
+    await writeStoredSession(nextSession);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +73,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             setApiTokenGetter(() => stored.token || null);
             setSession(stored);
             setBiometricLocked(false);
+            void refreshStoredSession(stored);
           } else {
             setApiTokenGetter(() => null);
             setSession(null);
@@ -67,6 +89,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setSession(stored);
         setBiometricLocked(false);
         setHydrated(true);
+        void refreshStoredSession(stored);
       }
     }
 
@@ -91,6 +114,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       setBiometricLocked(false);
       await writeStoredSession(nextSession);
+      await refreshStoredSession(nextSession);
     },
     signOut: async () => {
       const currentSession = session;
@@ -130,7 +154,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setApiTokenGetter(() => stored.token || null);
       setSession(stored);
       setBiometricLocked(false);
+      await refreshStoredSession(stored);
       return true;
+    },
+    refreshSession: async () => {
+      await refreshStoredSession(session);
     },
   }), [biometricLabel, biometricLocked, hydrated, session]);
 

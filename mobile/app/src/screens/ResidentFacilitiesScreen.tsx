@@ -1,6 +1,6 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
 import { subscribeToResidentFacilityUpdates } from '../lib/socket';
@@ -19,8 +19,8 @@ import { formatDateTime } from '../utils/format';
 const initialBookingForm = {
   booking_date: '',
   start_time: '',
-  duration_hours: '1',
-  guest_count: '1',
+  duration_hours: '',
+  guest_count: '',
   notes: '',
 };
 
@@ -35,6 +35,8 @@ export function ResidentFacilitiesScreen() {
   });
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
   const [bookingForm, setBookingForm] = useState(initialBookingForm);
+  const [bookingFilter, setBookingFilter] = useState<'Upcoming' | 'Past'>('Upcoming');
+  const [showFacilityPicker, setShowFacilityPicker] = useState(false);
   const [showBookingDatePicker, setShowBookingDatePicker] = useState(false);
   const [showBookingTimePicker, setShowBookingTimePicker] = useState(false);
 
@@ -88,6 +90,25 @@ export function ResidentFacilitiesScreen() {
   }, [loadAvailability, loadBase, selectedFacilityId, session?.user?.id, session?.user?.society_id]);
 
   const selectedFacility = useMemo(() => facilities.find((facility) => facility.id === selectedFacilityId) || null, [facilities, selectedFacilityId]);
+  const nowTs = Date.now();
+  const upcomingBookings = useMemo(
+    () => bookings.filter((booking) => {
+      const endTs = booking.end_time ? new Date(booking.end_time).getTime() : 0;
+      return endTs >= nowTs && booking.status !== 'Cancelled' && booking.status !== 'Rejected';
+    }),
+    [bookings, nowTs],
+  );
+  const pastBookings = useMemo(
+    () => bookings.filter((booking) => {
+      const endTs = booking.end_time ? new Date(booking.end_time).getTime() : 0;
+      return endTs < nowTs || booking.status === 'Completed' || booking.status === 'Cancelled' || booking.status === 'Rejected';
+    }),
+    [bookings, nowTs],
+  );
+  const visibleBookings = useMemo(
+    () => (bookingFilter === 'Upcoming' ? upcomingBookings : pastBookings),
+    [bookingFilter, pastBookings, upcomingBookings],
+  );
   const selectedBookingDateTime = useMemo(() => {
     if (bookingForm.booking_date && bookingForm.start_time) {
       return new Date(`${bookingForm.booking_date}T${bookingForm.start_time}`);
@@ -105,6 +126,22 @@ export function ResidentFacilitiesScreen() {
 
     return `${bookingForm.booking_date} at ${bookingForm.start_time}`;
   }, [bookingForm.booking_date, bookingForm.start_time]);
+
+  const selectedBookingDateLabel = useMemo(() => {
+    if (!bookingForm.booking_date) {
+      return 'No date selected';
+    }
+
+    return bookingForm.booking_date;
+  }, [bookingForm.booking_date]);
+
+  const selectedBookingTimeLabel = useMemo(() => {
+    if (!bookingForm.start_time) {
+      return 'No time selected';
+    }
+
+    return bookingForm.start_time;
+  }, [bookingForm.start_time]);
 
   const handleBookingDateChange = (_event: DateTimePickerEvent, date?: Date) => {
     setShowBookingDatePicker(Platform.OS === 'ios');
@@ -132,10 +169,12 @@ export function ResidentFacilitiesScreen() {
     }
 
     const startTime = new Date(`${bookingForm.booking_date}T${bookingForm.start_time}`);
-    const endTime = new Date(startTime.getTime() + Number(bookingForm.duration_hours || 1) * 3600000);
+    const durationHours = Math.max(1, Number(bookingForm.duration_hours || 1));
+    const guestCount = Math.max(1, Number(bookingForm.guest_count || 1));
+    const endTime = new Date(startTime.getTime() + durationHours * 3600000);
     const response = await createFacilityBooking({
       facility_id: selectedFacility.id,
-      guest_count: Number(bookingForm.guest_count || 1),
+      guest_count: guestCount,
       notes: bookingForm.notes,
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
@@ -174,17 +213,15 @@ export function ResidentFacilitiesScreen() {
 
         <View style={styles.panel}>
           <Text style={styles.sectionTitle}>Available amenities</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.facilityRow}>
-              {facilities.map((facility) => (
-                <Pressable key={facility.id} onPress={() => setSelectedFacilityId(facility.id)} style={[styles.facilityCard, selectedFacilityId === facility.id ? styles.facilityCardActive : null]}>
-                  <Text style={styles.cardTitle}>{facility.name}</Text>
-                  <Text style={styles.cardMeta}>{facility.type}</Text>
-                  <Text style={styles.helperText}>{facility.is_paid ? `Rs ${facility.pricing}/hr` : 'Free'} / Capacity {facility.capacity}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
+          <Pressable style={styles.facilitySelectField} onPress={() => setShowFacilityPicker(true)}>
+            <Text style={styles.pickerFieldLabel}>Amenity</Text>
+            <Text style={styles.pickerFieldValue}>{selectedFacility ? `${selectedFacility.name} (${selectedFacility.type})` : 'Select amenity'}</Text>
+          </Pressable>
+          {selectedFacility ? (
+            <Text style={styles.helperText}>
+              {selectedFacility.is_paid ? `Rs ${selectedFacility.pricing}/hr` : 'Free'} / Capacity {selectedFacility.capacity}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.panel}>
@@ -195,17 +232,25 @@ export function ResidentFacilitiesScreen() {
               <View style={styles.pickerPanel}>
                 <Text style={styles.helperText}>{bookingSelectionLabel}</Text>
                 <View style={styles.formRow}>
-                  <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowBookingDatePicker(true)}>
-                    <Text style={styles.secondaryButtonText}>Pick date</Text>
+                  <Pressable style={[styles.pickerField, styles.rowInput]} onPress={() => setShowBookingDatePicker(true)}>
+                    <Text style={styles.pickerFieldLabel}>Date</Text>
+                    <Text style={styles.pickerFieldValue}>{selectedBookingDateLabel}</Text>
                   </Pressable>
-                  <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowBookingTimePicker(true)}>
-                    <Text style={styles.secondaryButtonText}>Pick time</Text>
+                  <Pressable style={[styles.pickerField, styles.rowInput]} onPress={() => setShowBookingTimePicker(true)}>
+                    <Text style={styles.pickerFieldLabel}>Time</Text>
+                    <Text style={styles.pickerFieldValue}>{selectedBookingTimeLabel}</Text>
                   </Pressable>
                 </View>
               </View>
               <View style={styles.formRow}>
-                <TextInput value={bookingForm.duration_hours} onChangeText={(value) => setBookingForm((current) => ({ ...current, duration_hours: value.replace(/\D/g, '') || '1' }))} placeholder="Hours" placeholderTextColor={colors.textMuted} keyboardType="number-pad" style={[styles.input, styles.rowInput]} />
-                <TextInput value={bookingForm.guest_count} onChangeText={(value) => setBookingForm((current) => ({ ...current, guest_count: value.replace(/\D/g, '') || '1' }))} placeholder="Guests" placeholderTextColor={colors.textMuted} keyboardType="number-pad" style={[styles.input, styles.rowInput]} />
+                <View style={styles.rowInput}>
+                  <Text style={styles.pickerFieldLabel}>Duration (hours)</Text>
+                  <TextInput value={bookingForm.duration_hours} onChangeText={(value) => setBookingForm((current) => ({ ...current, duration_hours: value.replace(/\D/g, '') }))} placeholder="Hours" placeholderTextColor={colors.textMuted} keyboardType="number-pad" style={styles.input} />
+                </View>
+                <View style={styles.rowInput}>
+                  <Text style={styles.pickerFieldLabel}>Guests</Text>
+                  <TextInput value={bookingForm.guest_count} onChangeText={(value) => setBookingForm((current) => ({ ...current, guest_count: value.replace(/\D/g, '') }))} placeholder="Guests" placeholderTextColor={colors.textMuted} keyboardType="number-pad" style={styles.input} />
+                </View>
               </View>
               <TextInput value={bookingForm.notes} onChangeText={(value) => setBookingForm((current) => ({ ...current, notes: value }))} placeholder="Optional note" placeholderTextColor={colors.textMuted} multiline style={styles.textArea} />
               <Pressable onPress={() => void submitBooking()} style={styles.primaryButton}>
@@ -242,24 +287,37 @@ export function ResidentFacilitiesScreen() {
 
         <View style={styles.panel}>
           <Text style={styles.sectionTitle}>My bookings</Text>
-          {bookings.length ? bookings.map((booking) => (
+          <View style={styles.bookingFilterRow}>
+            {(['Upcoming', 'Past'] as const).map((option) => (
+              <Pressable
+                key={option}
+                onPress={() => setBookingFilter(option)}
+                style={[styles.bookingFilterChip, bookingFilter === option ? styles.bookingFilterChipActive : null]}
+              >
+                <Text style={[styles.bookingFilterChipText, bookingFilter === option ? styles.bookingFilterChipTextActive : null]}>
+                  {option}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {visibleBookings.length ? visibleBookings.map((booking) => (
             <View key={booking.id} style={styles.listCard}>
               <View style={styles.rowBetween}>
                 <View style={styles.cardCopy}>
                   <Text style={styles.cardTitle}>{booking.facility_name}</Text>
                   <Text style={styles.cardMeta}>{formatDateTime(booking.start_time)} to {formatDateTime(booking.end_time)}</Text>
-                  <Text style={styles.cardMeta}>{booking.notes || `${booking.guest_count} people`}</Text>
+                  <Text style={styles.microMeta}>{booking.notes || `${booking.guest_count} people`}</Text>
                 </View>
-                <Badge label={booking.status} tone={booking.status === 'Confirmed' ? 'info' : booking.status === 'Completed' ? 'success' : 'warning'} />
+                <Badge label={compactBookingStatus(booking.status)} tone={booking.status === 'Confirmed' ? 'info' : booking.status === 'Completed' ? 'success' : 'warning'} />
               </View>
-              {booking.status === 'Confirmed' && booking.is_cancellable ? (
+              {bookingFilter === 'Upcoming' && booking.status === 'Confirmed' && booking.is_cancellable ? (
                 <Pressable onPress={() => void cancelBooking(booking.id)} style={styles.secondaryButton}>
                   <Text style={styles.secondaryButtonText}>Cancel Booking</Text>
                 </Pressable>
               ) : null}
             </View>
           )) : (
-            <EmptyState title="No bookings yet" detail="Reserved amenities and their slot timings will appear here." />
+            <EmptyState title={`No ${bookingFilter.toLowerCase()} bookings`} detail={bookingFilter === 'Upcoming' ? 'Your upcoming amenity reservations will appear here.' : 'Completed and older bookings will appear here.'} />
           )}
         </View>
       </ScrollView>
@@ -278,8 +336,46 @@ export function ResidentFacilitiesScreen() {
           onChange={handleBookingTimeChange}
         />
       ) : null}
+      <Modal visible={showFacilityPicker} transparent animationType="fade" onRequestClose={() => setShowFacilityPicker(false)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.facilityPickerCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.modalTitle}>Select amenity</Text>
+              <Pressable onPress={() => setShowFacilityPicker(false)} style={styles.dismissButton}>
+                <Text style={styles.dismissButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.facilityPickerList}>
+              {facilities.map((facility) => (
+                <Pressable
+                  key={facility.id}
+                  onPress={() => {
+                    setSelectedFacilityId(facility.id);
+                    setShowFacilityPicker(false);
+                  }}
+                  style={[styles.facilityPickerItem, selectedFacilityId === facility.id ? styles.facilityPickerItemActive : null]}
+                >
+                  <Text style={[styles.facilityPickerItemTitle, selectedFacilityId === facility.id ? styles.facilityPickerItemTitleActive : null]}>
+                    {facility.name}
+                  </Text>
+                  <Text style={styles.cardMeta}>
+                    {facility.type} / {facility.is_paid ? `Rs ${facility.pricing}/hr` : 'Free'} / Capacity {facility.capacity}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
+}
+
+function compactBookingStatus(status: FacilityBooking['status']) {
+  if (status === 'Completed') return 'Completed';
+  if (status === 'Cancelled') return 'Cancelled';
+  if (status === 'Rejected') return 'Rejected';
+  return 'Upcoming';
 }
 
 const styles = StyleSheet.create({
@@ -290,13 +386,14 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
   panel: { borderRadius: 24, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 12 },
   sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  facilityRow: { flexDirection: 'row', gap: 12 },
-  facilityCard: { width: 180, borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6, borderWidth: 1, borderColor: 'transparent' },
-  facilityCardActive: { borderColor: '#bfd3ff', backgroundColor: '#eef4ff' },
+  facilitySelectField: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
   input: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, color: colors.text, paddingHorizontal: 14, paddingVertical: 14, fontSize: 14 },
   formRow: { flexDirection: 'row', gap: 10 },
   rowInput: { flex: 1 },
   pickerPanel: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, padding: 14, gap: 10 },
+  pickerField: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, paddingHorizontal: 14, paddingVertical: 11, gap: 2, justifyContent: 'center' },
+  pickerFieldLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  pickerFieldValue: { color: colors.text, fontSize: 16, fontWeight: '800' },
   textArea: {
     minHeight: 90,
     borderRadius: 16,
@@ -313,6 +410,13 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   secondaryButton: { borderRadius: 14, borderWidth: 1, borderColor: '#bfd3ff', backgroundColor: '#eef4ff', alignItems: 'center', paddingVertical: 12, marginTop: 8 },
   secondaryButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
+  modalScrim: { flex: 1, backgroundColor: 'rgba(10, 20, 35, 0.45)', justifyContent: 'center', padding: 20 },
+  facilityPickerCard: { maxHeight: '72%', borderRadius: 24, backgroundColor: colors.surface, padding: 18, gap: 12 },
+  facilityPickerList: { gap: 10 },
+  facilityPickerItem: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, padding: 14, gap: 4 },
+  facilityPickerItemActive: { borderColor: '#bfd3ff', backgroundColor: '#eef4ff' },
+  facilityPickerItemTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  facilityPickerItemTitleActive: { color: colors.primaryDeep },
   listCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   maintenanceCard: { borderRadius: 18, backgroundColor: '#fff7e9', borderWidth: 1, borderColor: '#f3d8a7', padding: 14, gap: 6 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
@@ -321,4 +425,13 @@ const styles = StyleSheet.create({
   cardMeta: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   helperText: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   subheading: { color: colors.text, fontSize: 15, fontWeight: '800', marginTop: 4 },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },
+  dismissButton: { borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8 },
+  dismissButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
+  bookingFilterRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  bookingFilterChip: { borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8 },
+  bookingFilterChipActive: { backgroundColor: '#e7efff', borderColor: '#bfd3ff' },
+  bookingFilterChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  bookingFilterChipTextActive: { color: colors.primaryDeep },
+  microMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 16 },
 });

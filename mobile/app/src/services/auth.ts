@@ -1,5 +1,5 @@
 import { api, getApiErrorMessage } from '../lib/api';
-import { AuthResponse, StoredSession } from '../types/auth';
+import { AuthResponse, SessionUser, StoredSession } from '../types/auth';
 
 export async function sendOtp(phoneNumber: string) {
   try {
@@ -26,6 +26,18 @@ export async function verifyOtp(phoneNumber: string, otp: string) {
     return {
       success: false,
       message: getApiErrorMessage(error, 'Unable to verify OTP right now.'),
+    } satisfies AuthResponse;
+  }
+}
+
+export async function fetchCurrentUser() {
+  try {
+    const response = await api.get<{ success: boolean; user: SessionUser }>('/auth/me');
+    return response.data;
+  } catch (error) {
+    return {
+      success: false,
+      message: getApiErrorMessage(error, 'Unable to refresh profile right now.'),
     } satisfies AuthResponse;
   }
 }

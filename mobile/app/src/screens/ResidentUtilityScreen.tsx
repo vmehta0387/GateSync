@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -70,7 +71,7 @@ const ROUTE_META: Record<ResidentActionRoute, { title: string; subtitle: string 
   },
   staff: {
     title: 'Staff',
-    subtitle: 'See registered household and society staff with live presence and schedules.',
+    subtitle: '',
   },
   documents: {
     title: 'Documents',
@@ -105,6 +106,7 @@ export function ResidentUtilityScreen({
   const [logs, setLogs] = useState<VisitorLog[]>([]);
   const [message, setMessage] = useState('');
   const [invoiceFilter, setInvoiceFilter] = useState<'All' | Invoice['status']>('All');
+  const [invoiceHistoryTab, setInvoiceHistoryTab] = useState<'current' | 'past'>('current');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
   const [selectedPoll, setSelectedPoll] = useState<PollItem | null>(null);
@@ -115,10 +117,11 @@ export function ResidentUtilityScreen({
   const [selectedDocument, setSelectedDocument] = useState<SharedDocument | null>(null);
   const [selectedCommitteeId, setSelectedCommitteeId] = useState<number | null>(null);
   const [connectTab, setConnectTab] = useState<'notices' | 'polls' | 'events' | 'updates'>('notices');
+  const [staffTypeFilter, setStaffTypeFilter] = useState<'All' | string>('All');
   const [expandedContactGroups, setExpandedContactGroups] = useState<Record<string, boolean>>({
-    managers: true,
+    managers: false,
     admins: false,
-    security: true,
+    security: false,
     housekeeping: false,
     plumber: false,
     electrician: false,
@@ -267,6 +270,14 @@ export function ResidentUtilityScreen({
     () => invoices.filter((invoice) => invoiceFilter === 'All' || invoice.status === invoiceFilter),
     [invoiceFilter, invoices],
   );
+  const visibleInvoiceHistory = useMemo(
+    () => filteredInvoices.filter((invoice) => (
+      invoiceHistoryTab === 'current'
+        ? ['Unpaid', 'Overdue', 'PartiallyPaid'].includes(invoice.status)
+        : ['Paid', 'Waived'].includes(invoice.status)
+    )),
+    [filteredInvoices, invoiceHistoryTab],
+  );
   const selectedInvoice = useMemo(
     () => invoices.find((invoice) => invoice.id === selectedInvoiceId) || null,
     [invoices, selectedInvoiceId],
@@ -274,6 +285,26 @@ export function ResidentUtilityScreen({
   const selectedCommittee = useMemo(
     () => committees.find((committee) => committee.id === selectedCommitteeId) || null,
     [committees, selectedCommitteeId],
+  );
+  const myStaff = useMemo(
+    () => staff.filter((member) => member.assignment_scope !== 'SOCIETY'),
+    [staff],
+  );
+  const societyStaff = useMemo(
+    () => staff.filter((member) => member.assignment_scope === 'SOCIETY'),
+    [staff],
+  );
+  const staffTypeOptions = useMemo(
+    () => ['All', ...Array.from(new Set(staff.map((member) => member.type))).sort()],
+    [staff],
+  );
+  const filteredMyStaff = useMemo(
+    () => myStaff.filter((member) => staffTypeFilter === 'All' || member.type === staffTypeFilter),
+    [myStaff, staffTypeFilter],
+  );
+  const filteredSocietyStaff = useMemo(
+    () => societyStaff.filter((member) => staffTypeFilter === 'All' || member.type === staffTypeFilter),
+    [societyStaff, staffTypeFilter],
   );
   const insideVisitors = useMemo(() => logs.filter((log) => log.status === 'CheckedIn'), [logs]);
   const importantNumberGroups = useMemo(() => {
@@ -311,9 +342,6 @@ export function ResidentUtilityScreen({
 
     const staffGroups: Array<{ key: string; title: string; type: ImportantServiceStaff['type'] }> = [
       { key: 'security', title: 'Security', type: 'Security' },
-      { key: 'housekeeping', title: 'Housekeeping', type: 'Cleaner' },
-      { key: 'plumber', title: 'Plumber', type: 'Plumber' },
-      { key: 'electrician', title: 'Electrician', type: 'Electrician' },
     ];
 
     staffGroups.forEach((staffGroup) => {
@@ -411,13 +439,21 @@ export function ResidentUtilityScreen({
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadData()} />}
       >
-        <View style={styles.headerCard}>
-          <Pressable onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Back</Text>
-          </Pressable>
-          <Text style={styles.title}>{meta.title}</Text>
-          <Text style={styles.subtitle}>{meta.subtitle}</Text>
-        </View>
+        {route === 'staff' || route === 'bills' ? (
+          <View style={styles.plainHeader}>
+            <Pressable onPress={onBack} style={styles.plainBackButton}>
+              <Text style={styles.backButtonText}>Back</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.headerCard}>
+            <Pressable onPress={onBack} style={styles.backButton}>
+              <Text style={styles.backButtonText}>Back</Text>
+            </Pressable>
+            <Text style={styles.title}>{meta.title}</Text>
+            {meta.subtitle ? <Text style={styles.subtitle}>{meta.subtitle}</Text> : null}
+          </View>
+        )}
 
         {message ? (
           <View style={styles.inlineNotice}>
@@ -427,45 +463,11 @@ export function ResidentUtilityScreen({
 
         {route === 'bills' ? (
           <>
-            <View style={styles.billingHero}>
-              <Text style={styles.billingHeroEyebrow}>Billing desk</Text>
-              <Text style={styles.billingHeroTitle}>Keep maintenance dues clear and predictable.</Text>
-              <Text style={styles.billingHeroSubtitle}>
-                Review current charges and open invoice detail without hunting through past records.
-              </Text>
-              <View style={styles.summaryRow}>
-                <MetricCard label="Pending amount" value={`Rs ${unpaidTotal.toFixed(0)}`} tone="danger" />
-                <MetricCard label="Due invoices" value={dueInvoices.length} tone="warning" />
-              </View>
-              {billingSummary ? (
-                <View style={styles.summaryRow}>
-                  <MetricCard label="Collected" value={`Rs ${billingSummary.total_collected.toFixed(0)}`} tone="success" />
-                  <MetricCard label="Overdue" value={`Rs ${billingSummary.overdue_amount.toFixed(0)}`} tone="warning" />
-                </View>
-              ) : null}
-            </View>
-
-            <View style={styles.filterRow}>
-              {(['All', 'Unpaid', 'Overdue', 'PartiallyPaid', 'Paid'] as const).map((status) => (
-                <Pressable
-                  key={status}
-                  onPress={() => setInvoiceFilter(status)}
-                  style={[styles.filterChip, invoiceFilter === status ? styles.filterChipActive : null]}
-                >
-                  <Text style={[styles.filterChipText, invoiceFilter === status ? styles.filterChipTextActive : null]}>
-                    {status === 'PartiallyPaid' ? 'Partial' : status}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={styles.summaryRow}>
-              <MetricCard label="Visible invoices" value={filteredInvoices.length} tone="primary" />
-              <MetricCard label="Overdue count" value={overdueInvoices.length} tone="danger" />
-            </View>
-
             {selectedInvoice ? (
               <Section title="Invoice detail">
+                <Pressable onPress={() => setSelectedInvoiceId(null)} style={styles.inlineBackButton}>
+                  <Text style={styles.backButtonText}>Back to invoices</Text>
+                </Pressable>
                 <View style={styles.invoiceDetailCard}>
                   <View style={styles.rowBetween}>
                     <View style={styles.copy}>
@@ -523,41 +525,83 @@ export function ResidentUtilityScreen({
                   </View>
                 </View>
               </Section>
-            ) : null}
-
-            <Section title="Invoice history">
-              {filteredInvoices.length ? (
-                filteredInvoices.map((invoice) => (
-                  <View key={invoice.id} style={styles.listCard}>
-                    <View style={styles.rowBetween}>
-                      <View style={styles.copy}>
-                        <Text style={styles.itemTitle}>{invoice.block_name}-{invoice.flat_number} / {invoice.invoice_number || `INV-${invoice.id}`}</Text>
-                        <Text style={styles.itemMeta}>{invoice.month_year} / Due {invoice.due_date || 'Not set'} / {invoice.billing_type || 'Bill'}</Text>
-                      </View>
-                      <Badge label={invoice.status} tone={getInvoiceTone(invoice.status)} />
-                    </View>
-                    <Text style={styles.amountText}>Balance Rs {(invoice.balance_amount ?? invoice.amount).toFixed(2)}</Text>
-                    <Text style={styles.itemMeta}>
-                      Subtotal Rs {(invoice.subtotal_amount ?? invoice.amount).toFixed(2)}
-                      {invoice.penalty_amount ? ` / Penalty Rs ${invoice.penalty_amount.toFixed(2)}` : ''}
-                      {invoice.adjustment_amount ? ` / Adjustment Rs ${invoice.adjustment_amount.toFixed(2)}` : ''}
-                    </Text>
-                    <View style={styles.actionRow}>
-                      <Pressable style={styles.secondaryButton} onPress={() => setSelectedInvoiceId(invoice.id)}>
-                        <Text style={styles.secondaryButtonText}>View detail</Text>
-                      </Pressable>
-                      {invoice.pdf_url ? (
-                        <Pressable style={styles.secondaryButton} onPress={() => void openLink(invoice.pdf_url || '', invoice.invoice_number || 'Invoice PDF')}>
-                          <Text style={styles.secondaryButtonText}>Download invoice</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
+            ) : (
+              <>
+                <View style={styles.billingHero}>
+                  <Text style={styles.billingHeroEyebrow}>Billing desk</Text>
+                  <View style={styles.summaryRow}>
+                    <MetricCard label="Pending amount" value={`Rs ${unpaidTotal.toFixed(0)}`} tone="danger" />
+                    <MetricCard label="Due invoices" value={dueInvoices.length} tone="warning" />
                   </View>
-                ))
-              ) : (
-                <EmptyState title="No invoices in this view" detail="Try another filter or wait for the next billing cycle to be generated." />
-              )}
-            </Section>
+                </View>
+
+                <View style={styles.filterRow}>
+                  {(['All', 'Unpaid', 'Overdue', 'Paid'] as const).map((status) => (
+                    <Pressable
+                      key={status}
+                      onPress={() => setInvoiceFilter(status)}
+                      style={[styles.filterChip, invoiceFilter === status ? styles.filterChipActive : null]}
+                    >
+                      <Text style={[styles.filterChipText, invoiceFilter === status ? styles.filterChipTextActive : null]}>
+                        {status}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Section title="Invoice history">
+                  <View style={styles.historyTabRow}>
+                    {([
+                      { key: 'current', label: `Current (${filteredInvoices.filter((invoice) => ['Unpaid', 'Overdue', 'PartiallyPaid'].includes(invoice.status)).length})` },
+                      { key: 'past', label: `Past (${filteredInvoices.filter((invoice) => ['Paid', 'Waived'].includes(invoice.status)).length})` },
+                    ] as const).map((tab) => (
+                      <Pressable
+                        key={tab.key}
+                        onPress={() => setInvoiceHistoryTab(tab.key)}
+                        style={[styles.historyTabButton, invoiceHistoryTab === tab.key ? styles.historyTabButtonActive : null]}
+                      >
+                        <Text style={[styles.historyTabButtonText, invoiceHistoryTab === tab.key ? styles.historyTabButtonTextActive : null]}>
+                          {tab.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {visibleInvoiceHistory.length ? (
+                    visibleInvoiceHistory.map((invoice) => (
+                      <View key={invoice.id} style={styles.listCard}>
+                        <View style={styles.rowBetween}>
+                          <View style={styles.copy}>
+                            <Text style={styles.itemTitle}>{invoice.block_name}-{invoice.flat_number}</Text>
+                            <Text style={styles.itemMeta}>{invoice.month_year} / Due {invoice.due_date || 'Not set'} / {invoice.billing_type || 'Bill'}</Text>
+                          </View>
+                          <Badge label={invoice.status} tone={getInvoiceTone(invoice.status)} />
+                        </View>
+                        <Text style={styles.amountText}>Balance Rs {(invoice.balance_amount ?? invoice.amount).toFixed(2)}</Text>
+                        <Text style={styles.itemMeta}>
+                          Subtotal Rs {(invoice.subtotal_amount ?? invoice.amount).toFixed(2)}
+                          {invoice.penalty_amount ? ` / Penalty Rs ${invoice.penalty_amount.toFixed(2)}` : ''}
+                          {invoice.adjustment_amount ? ` / Adjustment Rs ${invoice.adjustment_amount.toFixed(2)}` : ''}
+                        </Text>
+                        <View style={styles.actionRow}>
+                          <Pressable style={styles.secondaryButton} onPress={() => setSelectedInvoiceId(invoice.id)}>
+                            <Text style={styles.secondaryButtonText}>View detail</Text>
+                          </Pressable>
+                          {invoice.pdf_url ? (
+                            <Pressable style={styles.secondaryButton} onPress={() => void openLink(invoice.pdf_url || '', invoice.invoice_number || 'Invoice PDF')}>
+                              <Text style={styles.secondaryButtonText}>Download invoice</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))
+                  ) : (
+                    <EmptyState
+                      title={invoiceHistoryTab === 'current' ? 'No current invoices' : 'No past invoices'}
+                      detail={invoiceHistoryTab === 'current' ? 'Current due bills will appear here.' : 'Paid or waived invoices will appear here.'}
+                    />
+                  )}
+                </Section>
+              </>
+            )}
           </>
         ) : null}
 
@@ -848,30 +892,45 @@ export function ResidentUtilityScreen({
         {route === 'staff' ? (
           <Section title="Staff directory">
             {staff.length ? (
-              staff.map((member) => (
-                <View key={member.id} style={styles.listCard}>
-                  <View style={styles.rowBetween}>
-                    <View style={styles.copy}>
-                      <Text style={styles.itemTitle}>{member.name}</Text>
-                      <Text style={styles.itemMeta}>{member.type} / {member.assignment_scope === 'SOCIETY' ? 'Society-wide' : 'Flat-linked'}</Text>
-                    </View>
-                    <Badge
-                      label={member.is_blacklisted ? 'Blocked' : member.is_inside ? 'Inside' : 'Registered'}
-                      tone={member.is_blacklisted ? 'danger' : member.is_inside ? 'success' : 'info'}
-                    />
-                  </View>
-                  <Text style={styles.itemMeta}>Phone: {member.phone || 'Not shared'}</Text>
-                  <Text style={styles.itemMeta}>
-                    Schedule: {member.shift_timing || `${member.work_start_time || '--'} to ${member.work_end_time || '--'}`}
-                  </Text>
-                  {member.assigned_flats.length ? (
-                    <Text style={styles.itemMeta}>
-                      Assigned: {member.assigned_flats.map((flat) => flat.label).join(', ')}
-                    </Text>
-                  ) : null}
-                  {member.blacklist_reason ? <Text style={styles.alertMeta}>Reason: {member.blacklist_reason}</Text> : null}
+              <>
+                <View style={styles.filterRow}>
+                  {staffTypeOptions.map((type) => (
+                    <Pressable
+                      key={type}
+                      onPress={() => setStaffTypeFilter(type)}
+                      style={[styles.filterChip, staffTypeFilter === type ? styles.filterChipActive : null]}
+                    >
+                      <Text style={[styles.filterChipText, staffTypeFilter === type ? styles.filterChipTextActive : null]}>
+                        {type === 'Cleaner' ? 'Housekeeping' : type}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
-              ))
+
+                <View style={styles.subSection}>
+                  <Text style={styles.subSectionTitle}>My staff</Text>
+                  {filteredMyStaff.length ? (
+                    filteredMyStaff.map((member) => <StaffMemberCard key={`my-${member.id}`} member={member} showScopeLabel={false} />)
+                  ) : (
+                    <EmptyState
+                      title="No staff assigned to your flat"
+                      detail={staffTypeFilter === 'All' ? 'Flat-specific staff assigned to your home will appear here.' : `No ${staffTypeFilter === 'Cleaner' ? 'housekeeping' : staffTypeFilter.toLowerCase()} staff assigned to your flat.`}
+                    />
+                  )}
+                </View>
+
+                <View style={styles.subSection}>
+                  <Text style={styles.subSectionTitle}>Society staff</Text>
+                  {filteredSocietyStaff.length ? (
+                    filteredSocietyStaff.map((member) => <StaffMemberCard key={`society-${member.id}`} member={member} showScopeLabel />)
+                  ) : (
+                    <EmptyState
+                      title="No society staff shared yet"
+                      detail={staffTypeFilter === 'All' ? 'Society-wide support staff will appear here when the admin publishes them.' : `No ${staffTypeFilter === 'Cleaner' ? 'housekeeping' : staffTypeFilter.toLowerCase()} staff shared society-wide yet.`}
+                    />
+                  )}
+                </View>
+              </>
             ) : (
               <EmptyState title="No staff shared yet" detail="Household and society staff entries will appear here when added by the admin." />
             )}
@@ -1217,11 +1276,66 @@ function NoticeCard({ notice, compact = false, onPress }: { notice: NoticeItem; 
   );
 }
 
+function StaffMemberCard({
+  member,
+  showScopeLabel,
+}: {
+  member: ResidentStaffDirectoryItem;
+  showScopeLabel: boolean;
+}) {
+  return (
+    <View style={styles.listCard}>
+      <View style={styles.staffCardTop}>
+        <View style={styles.staffIdentityRow}>
+          {member.profile_photo_url ? (
+            <Image source={{ uri: resolveAbsoluteUrl(member.profile_photo_url) }} style={styles.staffAvatar} resizeMode="cover" />
+          ) : (
+            <View style={[styles.staffAvatar, styles.staffAvatarPlaceholder]}>
+              <Text style={styles.staffAvatarText}>{getStaffAvatarLabel(member.type)}</Text>
+            </View>
+          )}
+          <View style={styles.staffCardCopy}>
+            <Text style={styles.itemTitle}>{member.name}</Text>
+            <Text style={styles.itemMeta}>{showScopeLabel ? `${member.type} / Society-wide` : member.type}</Text>
+          </View>
+        </View>
+        <View style={styles.staffCardActions}>
+          {member.is_blacklisted ? <Badge label="Blocked" tone="danger" /> : null}
+          {!member.is_blacklisted && member.is_inside ? <Badge label="Inside" tone="success" /> : null}
+          {member.phone ? (
+            <Pressable style={styles.callButton} onPress={() => void handleCall(member.phone, member.name)}>
+              <Text style={styles.callButtonText}>Call</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+      <Text style={styles.itemMeta}>
+        Schedule: {member.shift_timing || `${member.work_start_time || '--'} to ${member.work_end_time || '--'}`}
+      </Text>
+      {member.assigned_flats.length ? (
+        <Text style={styles.itemMeta}>
+          Assigned: {member.assigned_flats.map((flat) => flat.label).join(', ')}
+        </Text>
+      ) : null}
+      {member.blacklist_reason ? <Text style={styles.alertMeta}>Reason: {member.blacklist_reason}</Text> : null}
+    </View>
+  );
+}
+
 function getNoticeTone(noticeType: string) {
   if (noticeType === 'Emergency' || noticeType === 'Urgent') return 'danger';
   if (noticeType === 'Maintenance') return 'warning';
   if (noticeType === 'Event') return 'success';
   return 'info';
+}
+
+function getStaffAvatarLabel(type: string) {
+  const normalizedType = String(type || '').trim().toLowerCase();
+  if (normalizedType === 'security') return 'SG';
+  if (normalizedType === 'cleaner') return 'HK';
+  if (normalizedType === 'plumber') return 'PL';
+  if (normalizedType === 'electrician') return 'EL';
+  return 'ST';
 }
 
 function getVisitorTone(status: VisitorLog['status']) {
@@ -1306,6 +1420,9 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 8,
   },
+  plainHeader: {
+    alignItems: 'flex-start',
+  },
   billingHero: {
     borderRadius: 26,
     backgroundColor: '#f5f8ff',
@@ -1338,10 +1455,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  plainBackButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
   backButtonText: {
     color: colors.primaryDeep,
     fontSize: 13,
     fontWeight: '800',
+  },
+  inlineBackButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   title: {
     color: colors.text,
@@ -1375,6 +1508,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  historyTabRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   filterChip: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1393,6 +1530,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   filterChipTextActive: {
+    color: colors.primaryDeep,
+  },
+  historyTabButton: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  historyTabButtonActive: {
+    backgroundColor: '#e7efff',
+    borderColor: '#bfd3ff',
+  },
+  historyTabButtonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  historyTabButtonTextActive: {
     color: colors.primaryDeep,
   },
   metricCard: {
@@ -1629,6 +1788,45 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '800',
+  },
+  staffIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingRight: 96,
+  },
+  staffAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+  },
+  staffAvatarPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e7efff',
+  },
+  staffAvatarText: {
+    color: colors.primaryDeep,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  staffCardTop: {
+    position: 'relative',
+    minHeight: 56,
+    justifyContent: 'flex-start',
+  },
+  staffCardCopy: {
+    gap: 4,
+    flex: 1,
+  },
+  staffCardActions: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    alignItems: 'flex-end',
+    gap: 8,
   },
   contactRole: {
     color: colors.textMuted,

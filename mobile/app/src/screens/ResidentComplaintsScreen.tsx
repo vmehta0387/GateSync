@@ -40,6 +40,7 @@ export function ResidentComplaintsScreen() {
   const [message, setMessage] = useState('');
   const [closingReason, setClosingReason] = useState('');
   const [selectedMessageEntry, setSelectedMessageEntry] = useState<ComplaintDetail['messages'][number] | null>(null);
+  const [ticketFilter, setTicketFilter] = useState<'Open' | 'InProgress' | 'Closed'>('Open');
 
   const closeTicketDetail = useCallback(() => {
     setSelectedComplaintId(null);
@@ -112,7 +113,19 @@ export function ResidentComplaintsScreen() {
     });
   }, [loadBase, loadDetail, selectedComplaintId, session?.user?.id]);
 
-  const visibleComplaints = useMemo(() => complaints.slice(0, 20), [complaints]);
+  const filteredComplaints = useMemo(() => {
+    if (ticketFilter === 'Closed') {
+      return complaints.filter((complaint) => ['Resolved', 'Closed'].includes(complaint.status));
+    }
+
+    if (ticketFilter === 'InProgress') {
+      return complaints.filter((complaint) => ['Assigned', 'InProgress'].includes(complaint.status));
+    }
+
+    return complaints.filter((complaint) => ['Open', 'Pending'].includes(complaint.status));
+  }, [complaints, ticketFilter]);
+
+  const visibleComplaints = useMemo(() => filteredComplaints.slice(0, 20), [filteredComplaints]);
 
   const closeSelectedComplaint = async () => {
     if (!detail) {
@@ -256,30 +269,44 @@ export function ResidentComplaintsScreen() {
           <View style={styles.rowBetween}>
             <View style={styles.cardCopy}>
               <Text style={styles.sectionTitle}>My tickets</Text>
-              <Text style={styles.helperText}>Open any ticket to view its full details and conversation.</Text>
+              <Text style={styles.helperText}>Open a ticket to view the full details and conversation.</Text>
             </View>
             <Text style={styles.ticketCount}>{visibleComplaints.length}</Text>
+          </View>
+          <View style={styles.ticketFilterRow}>
+            {([
+              { key: 'Open', label: 'Open' },
+              { key: 'InProgress', label: 'In Progress' },
+              { key: 'Closed', label: 'Closed' },
+            ] as const).map((option) => (
+              <Pressable
+                key={option.key}
+                onPress={() => setTicketFilter(option.key)}
+                style={[styles.ticketFilterChip, ticketFilter === option.key ? styles.ticketFilterChipActive : null]}
+              >
+                <Text style={[styles.ticketFilterChipText, ticketFilter === option.key ? styles.ticketFilterChipTextActive : null]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
           {visibleComplaints.length ? visibleComplaints.map((complaint) => (
             <Pressable key={complaint.id} onPress={() => setSelectedComplaintId(complaint.id)} style={styles.ticketCard}>
               <View style={styles.rowBetween}>
                 <View style={styles.cardCopy}>
                   <Text style={styles.cardTitle}>{buildComplaintSubject(complaint)}</Text>
-                  <Text style={styles.cardMeta}>{complaint.ticket_id} / {complaint.category_name} / {complaint.block_name}-{complaint.flat_number}</Text>
                 </View>
-                <View style={styles.badgeStack}>
+                <View style={styles.ticketBadgeRow}>
                   <Badge label={complaint.priority} tone={getPriorityTone(complaint.priority)} />
-                  <Badge label={complaint.status} tone={complaint.is_overdue ? 'danger' : complaint.status === 'Resolved' || complaint.status === 'Closed' ? 'success' : 'info'} />
+                  <Badge label={compactComplaintStatus(complaint.status)} tone={complaint.is_overdue ? 'danger' : complaint.status === 'Resolved' || complaint.status === 'Closed' ? 'success' : 'info'} />
                 </View>
               </View>
-              <Text numberOfLines={2} style={styles.ticketPreview}>{complaint.description}</Text>
               <View style={styles.ticketFooter}>
                 <Text style={styles.microText}>{formatDateTime(complaint.updated_at || complaint.created_at)}</Text>
-                {complaint.attachments?.length ? <Text style={styles.microText}>{complaint.attachments.length} attachment(s)</Text> : null}
               </View>
             </Pressable>
           )) : (
-            <EmptyState title="No complaints yet" detail="Your submitted tickets and their resolution status will appear here." />
+            <EmptyState title="No tickets in this view" detail="Switch filters to check other helpdesk tickets." />
           )}
         </View>
       </ScrollView>
@@ -400,6 +427,11 @@ function getPriorityTone(priority: 'Low' | 'Medium' | 'High') {
   return 'info';
 }
 
+function compactComplaintStatus(status: ComplaintSummaryItem['status']) {
+  if (status === 'InProgress') return 'In Progress';
+  return status;
+}
+
 function buildComplaintSubject(complaint: ComplaintSummaryItem) {
   const description = (complaint.description || '').trim();
   const firstLine = description.split(/\r?\n/)[0]?.trim() || '';
@@ -481,11 +513,17 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
   disabledButton: { opacity: 0.55 },
   input: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, color: colors.text, paddingHorizontal: 14, paddingVertical: 14, fontSize: 14 },
+  ticketFilterRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  ticketFilterChip: { borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8 },
+  ticketFilterChipActive: { backgroundColor: '#e7efff', borderColor: '#bfd3ff' },
+  ticketFilterChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  ticketFilterChipTextActive: { color: colors.primaryDeep },
   ticketCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 8, borderWidth: 1, borderColor: colors.border },
   detailCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   timelineCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 6 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
   badgeStack: { gap: 6, alignItems: 'flex-end' },
+  ticketBadgeRow: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' },
   cardCopy: { flex: 1, gap: 4 },
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
   cardMeta: { color: colors.textMuted, fontSize: 12 },

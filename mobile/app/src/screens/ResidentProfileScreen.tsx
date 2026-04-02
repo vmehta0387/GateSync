@@ -1,10 +1,16 @@
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { openLegalPage } from '../lib/legal';
 import { useSession } from '../providers/SessionProvider';
 import { colors } from '../theme';
 
 export function ResidentProfileScreen() {
-  const { session, signOut } = useSession();
+  const { session, signOut, refreshSession } = useSession();
+
+  useEffect(() => {
+    void refreshSession();
+  }, []);
+
   const name = session?.user.name?.trim() || 'Resident';
   const initials = name
     .split(' ')

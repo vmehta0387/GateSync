@@ -126,6 +126,18 @@ const getFacilityById = async (societyId, facilityId) => {
     return rows[0] || null;
 };
 
+const syncCompletedBookingsForSociety = async (societyId) => {
+    await db.query(
+        `UPDATE facility_bookings
+         SET status = 'Completed'
+         WHERE society_id = ?
+           AND status = 'Confirmed'
+           AND end_time IS NOT NULL
+           AND end_time < NOW()`,
+        [societyId]
+    );
+};
+
 const getOverlapGuestCount = async (facilityId, startTime, endTime, excludeBookingId = null) => {
     const [rows] = await db.query(
         `SELECT COALESCE(SUM(guest_count), 0) AS total_guests
@@ -208,6 +220,8 @@ const fetchBookings = async ({ societyId, userId = null, status = null, facility
 
 exports.getFacilities = async (req, res) => {
     try {
+        await syncCompletedBookingsForSociety(req.user.society_id);
+
         const [rows] = await db.query(
             `SELECT
                 f.*,
@@ -350,6 +364,8 @@ exports.updateFacility = async (req, res) => {
 
 exports.getAvailability = async (req, res) => {
     try {
+        await syncCompletedBookingsForSociety(req.user.society_id);
+
         const facilityId = Number(req.query.facility_id);
         if (!facilityId) {
             return res.status(400).json({ success: false, message: 'facility_id is required' });
@@ -520,6 +536,8 @@ exports.createBooking = async (req, res) => {
 
 exports.getBookings = async (req, res) => {
     try {
+        await syncCompletedBookingsForSociety(req.user.society_id);
+
         const status = normalizeOptionalString(req.query.status);
         const facilityId = req.query.facility_id ? Number(req.query.facility_id) : null;
         const userId = req.user.role === 'RESIDENT' ? req.user.id : null;

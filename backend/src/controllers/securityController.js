@@ -8,6 +8,7 @@ const INCIDENT_CATEGORIES = ['Access', 'Visitor', 'Patrol', 'Safety', 'Equipment
 const INCIDENT_SEVERITIES = ['Low', 'Medium', 'High', 'Critical'];
 const INCIDENT_STATUSES = ['Open', 'InReview', 'Resolved', 'Closed'];
 const SHIFT_STATUSES = ['Scheduled', 'OnDuty', 'Completed', 'Missed', 'Cancelled'];
+const SHIFT_RECURRENCE_TYPES = ['None', 'Daily', 'Weekly'];
 
 const normalizeOptionalString = (value) => {
     const normalized = String(value || '').trim();
@@ -30,6 +31,55 @@ const formatDateTime = (value) => {
     if (!value) return null;
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+const addDays = (date, days) => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+};
+
+const startOfDay = (value) => {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
+
+const buildRecurringShiftWindows = ({ scheduledStart, scheduledEnd, recurrenceType, recurrenceUntil }) => {
+    if (recurrenceType === 'None') {
+        return [{ scheduledStart, scheduledEnd }];
+    }
+
+    if (!recurrenceUntil || Number.isNaN(recurrenceUntil.getTime())) {
+        return { error: 'Recurring shifts need a valid repeat-until date' };
+    }
+
+    const untilDay = startOfDay(recurrenceUntil);
+    const firstDay = startOfDay(scheduledStart);
+    if (untilDay < firstDay) {
+        return { error: 'Repeat-until date must be on or after the first shift date' };
+    }
+
+    const maxDays = 180;
+    if ((untilDay.getTime() - firstDay.getTime()) / 86400000 > maxDays) {
+        return { error: `Recurring shifts can only be created up to ${maxDays} days ahead` };
+    }
+
+    const windows = [];
+    const stepDays = recurrenceType === 'Weekly' ? 7 : 1;
+    let offsetDays = 0;
+
+    while (true) {
+        const nextStart = addDays(scheduledStart, offsetDays);
+        const nextEnd = addDays(scheduledEnd, offsetDays);
+        if (startOfDay(nextStart) > untilDay) {
+            break;
+        }
+        windows.push({ scheduledStart: nextStart, scheduledEnd: nextEnd });
+        offsetDays += stepDays;
+    }
+
+    return windows;
 };
 
 const buildUploadedFilePayload = (req, file) => {
@@ -362,9 +412,23 @@ exports.createGuardShift = async (req, res) => {
         const scheduledStart = new Date(req.body.scheduled_start);
         const scheduledEnd = new Date(req.body.scheduled_end);
         const shiftLabel = String(req.body.shift_label || '').trim();
+        const recurrenceType = SHIFT_RECURRENCE_TYPES.includes(String(req.body.recurrence_type || 'None'))
+            ? String(req.body.recurrence_type || 'None')
+            : 'None';
+        const recurrenceUntil = req.body.recurrence_until ? new Date(req.body.recurrence_until) : null;
 
         if ((!requestedGuardUserId && !securityStaffId) || !shiftLabel || Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime()) || scheduledStart >= scheduledEnd) {
             return res.status(400).json({ success: false, message: 'Security staff, label, and valid shift window are required' });
+        }
+
+        const shiftWindows = buildRecurringShiftWindows({
+            scheduledStart,
+            scheduledEnd,
+            recurrenceType,
+            recurrenceUntil,
+        });
+        if (!Array.isArray(shiftWindows)) {
+            return res.status(400).json({ success: false, message: shiftWindows.error });
         }
 
         let guardUserId = requestedGuardUserId;
@@ -389,30 +453,74 @@ exports.createGuardShift = async (req, res) => {
             resolvedSecurityStaffId = staffRows[0]?.id || null;
         }
 
-        const [result] = await db.query(
-            `INSERT INTO guard_shifts (
-                society_id, security_staff_id, guard_user_id, shift_label, scheduled_start,
-                scheduled_end, status, notes, created_by
-             ) VALUES (?, ?, ?, ?, ?, ?, 'Scheduled', ?, ?)`,
-            [
-                req.user.society_id,
-                resolvedSecurityStaffId,
-                guardUserId,
-                shiftLabel,
-                scheduledStart,
-                scheduledEnd,
-                normalizeOptionalString(req.body.notes),
-                req.user.id,
-            ]
-        );
+        const createdShiftIds = [];
+        const skippedShiftCount = { value: 0 };
+        const normalizedNotes = normalizeOptionalString(req.body.notes);
+
+        for (const window of shiftWindows) {
+            const [existing] = await db.query(
+                `SELECT id
+                 FROM guard_shifts
+                 WHERE society_id = ?
+                   AND COALESCE(security_staff_id, 0) = COALESCE(?, 0)
+                   AND COALESCE(guard_user_id, 0) = COALESCE(?, 0)
+                   AND shift_label = ?
+                   AND scheduled_start = ?
+                   AND scheduled_end = ?
+                 LIMIT 1`,
+                [
+                    req.user.society_id,
+                    resolvedSecurityStaffId,
+                    guardUserId,
+                    shiftLabel,
+                    window.scheduledStart,
+                    window.scheduledEnd,
+                ]
+            );
+
+            if (existing.length) {
+                skippedShiftCount.value += 1;
+                continue;
+            }
+
+            const [result] = await db.query(
+                `INSERT INTO guard_shifts (
+                    society_id, security_staff_id, guard_user_id, shift_label, scheduled_start,
+                    scheduled_end, status, notes, created_by
+                 ) VALUES (?, ?, ?, ?, ?, ?, 'Scheduled', ?, ?)`,
+                [
+                    req.user.society_id,
+                    resolvedSecurityStaffId,
+                    guardUserId,
+                    shiftLabel,
+                    window.scheduledStart,
+                    window.scheduledEnd,
+                    normalizedNotes,
+                    req.user.id,
+                ]
+            );
+
+            createdShiftIds.push(result.insertId);
+        }
+
+        if (!createdShiftIds.length) {
+            return res.status(409).json({ success: false, message: 'Matching shifts already exist for the selected recurring pattern' });
+        }
 
         emitToRooms(
             buildSecurityRooms(req.user.society_id),
             'security_shift_updated',
-            { shift_id: result.insertId, security_staff_id: resolvedSecurityStaffId, guard_user_id: guardUserId }
+            { shift_ids: createdShiftIds, security_staff_id: resolvedSecurityStaffId, guard_user_id: guardUserId }
         );
 
-        return res.status(201).json({ success: true, message: 'Guard shift created successfully' });
+        const createdCount = createdShiftIds.length;
+        const skippedCount = skippedShiftCount.value;
+        const createdMessage = createdCount === 1
+            ? 'Guard shift created successfully'
+            : `${createdCount} recurring guard shifts created successfully`;
+        const skippedMessage = skippedCount > 0 ? ` (${skippedCount} duplicate shift${skippedCount > 1 ? 's' : ''} skipped)` : '';
+
+        return res.status(201).json({ success: true, message: `${createdMessage}${skippedMessage}` });
     } catch (error) {
         console.error('createGuardShift error:', error);
         return res.status(500).json({ success: false, message: error.message || 'Server error creating shift' });
