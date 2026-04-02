@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const http = require('http');
 const path = require('path');
 const { initWebSocket } = require('./websocket/socket');
+const { corsOptions } = require('./config/cors');
 const { uploadsRoot, ensureUploadsRoot } = require('./config/uploads');
 
 dotenv.config();
@@ -16,7 +17,7 @@ const server = http.createServer(app);
 initWebSocket(server);
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 ensureUploadsRoot();
 app.use('/uploads', express.static(uploadsRoot));

@@ -1,13 +1,11 @@
 const { Server } = require('socket.io');
+const { corsOptions } = require('../config/cors');
 
 let io;
 
 exports.initWebSocket = (server) => {
     io = new Server(server, {
-        cors: {
-            origin: '*',
-            methods: ['GET', 'POST', 'PUT', 'DELETE']
-        }
+        cors: corsOptions
     });
 
     io.on('connection', (socket) => {
