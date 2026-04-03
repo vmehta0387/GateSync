@@ -543,14 +543,61 @@ exports.getStaffDirectory = async (req, res) => {
 
 exports.getStaffLogs = async (req, res) => {
     try {
-        const staffId = req.query.staff_id ? Number(req.query.staff_id) : null;
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+        const offset = (page - 1) * limit;
+
+        const parsedStaffId = req.query.staff_id ? Number(req.query.staff_id) : null;
+        const staffId = Number.isInteger(parsedStaffId) && parsedStaffId > 0 ? parsedStaffId : null;
+
+        const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date_from || ''))
+            ? String(req.query.date_from)
+            : null;
+        const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date_to || ''))
+            ? String(req.query.date_to)
+            : null;
+
+        const timeFrom = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(req.query.time_from || ''))
+            ? String(req.query.time_from)
+            : null;
+        const timeTo = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(req.query.time_to || ''))
+            ? String(req.query.time_to)
+            : null;
+
+        const whereClauses = ['s.society_id = ?'];
         const queryParams = [req.user.society_id];
-        let staffFilter = '';
+        const activityTimestamp = 'COALESCE(sl.entry_time, sl.exit_time)';
 
         if (staffId) {
-            staffFilter = ' AND s.id = ?';
+            whereClauses.push('s.id = ?');
             queryParams.push(staffId);
         }
+
+        if (dateFrom) {
+            whereClauses.push(`DATE(${activityTimestamp}) >= ?`);
+            queryParams.push(dateFrom);
+        }
+
+        if (dateTo) {
+            whereClauses.push(`DATE(${activityTimestamp}) <= ?`);
+            queryParams.push(dateTo);
+        }
+
+        if (!dateFrom && !dateTo) {
+            whereClauses.push(`DATE(${activityTimestamp}) = CURRENT_DATE()`);
+        }
+
+        if (timeFrom) {
+            whereClauses.push(`TIME(${activityTimestamp}) >= ?`);
+            queryParams.push(timeFrom);
+        }
+
+        if (timeTo) {
+            whereClauses.push(`TIME(${activityTimestamp}) <= ?`);
+            queryParams.push(timeTo);
+        }
+
+        const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
 
         const [logs] = await db.query(
             `SELECT
@@ -569,13 +616,31 @@ exports.getStaffLogs = async (req, res) => {
                 END AS is_late
             FROM staff_logs sl
             INNER JOIN staff s ON s.id = sl.staff_id
-            WHERE s.society_id = ?${staffFilter}
-            ORDER BY COALESCE(sl.entry_time, sl.exit_time) DESC, sl.id DESC
-            LIMIT 200`,
+            ${whereSql}
+            ORDER BY ${activityTimestamp} DESC, sl.id DESC
+            LIMIT ? OFFSET ?`,
+            [...queryParams, limit, offset]
+        );
+
+        const [countResult] = await db.query(
+            `SELECT COUNT(*) AS total
+             FROM staff_logs sl
+             INNER JOIN staff s ON s.id = sl.staff_id
+             ${whereSql}`,
             queryParams
         );
 
-        return res.status(200).json({ success: true, logs });
+        const total = Number(countResult?.[0]?.total || 0);
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+
+        return res.status(200).json({
+            success: true,
+            logs,
+            page,
+            limit,
+            total,
+            total_pages: totalPages,
+        });
     } catch (error) {
         console.error('getStaffLogs error:', error);
         return res.status(500).json({ success: false, message: 'Server error retrieving staff logs' });

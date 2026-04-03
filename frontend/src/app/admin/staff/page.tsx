@@ -80,6 +80,13 @@ type StaffLog = {
   is_late: boolean;
 };
 
+type StaffLogPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+};
+
 type StaffMeta = {
   staff_types: string[];
   assignment_scopes: ('SOCIETY' | 'FLAT_SPECIFIC')[];
@@ -145,6 +152,7 @@ const EMPTY_FORM: StaffFormData = {
 };
 
 const API_BASE_URL = 'https://api.gatesync.in';
+const STAFF_LOGS_PAGE_SIZE = 20;
 
 function formatDateTime(value: string | null) {
   if (!value) return 'Not available';
@@ -158,6 +166,12 @@ function formatDateTime(value: string | null) {
 function formatTime(value: string) {
   if (!value) return 'Not set';
   return value.slice(0, 5);
+}
+
+function getTodayDateInput() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
 }
 
 function getToken() {
@@ -188,6 +202,13 @@ export default function StaffPage() {
   const router = useRouter();
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [staffLogs, setStaffLogs] = useState<StaffLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsPagination, setLogsPagination] = useState<StaffLogPagination>({
+    page: 1,
+    limit: STAFF_LOGS_PAGE_SIZE,
+    total: 0,
+    total_pages: 1,
+  });
   const [meta, setMeta] = useState<StaffMeta>({ staff_types: [], assignment_scopes: ['SOCIETY', 'FLAT_SPECIFIC'], id_types: [], weekdays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], flats: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -196,6 +217,10 @@ export default function StaffPage() {
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [presenceFilter, setPresenceFilter] = useState<'ALL' | 'INSIDE' | 'OUTSIDE' | 'BLACKLISTED'>('ALL');
   const [logFilter, setLogFilter] = useState('ALL');
+  const [logDateFrom, setLogDateFrom] = useState(() => getTodayDateInput());
+  const [logDateTo, setLogDateTo] = useState(() => getTodayDateInput());
+  const [logTimeFrom, setLogTimeFrom] = useState('');
+  const [logTimeTo, setLogTimeTo] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [form, setForm] = useState<StaffFormData>(EMPTY_FORM);
@@ -226,32 +251,64 @@ export default function StaffPage() {
     }
   }, []);
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async (page = 1) => {
     const token = getToken();
-    const response = await fetch('https://api.gatesync.in/api/v1/staff/logs', {
-      headers: { Authorization: `Bearer ${token}` },
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(STAFF_LOGS_PAGE_SIZE),
+      date_from: logDateFrom,
+      date_to: logDateTo,
     });
-    const data = await response.json();
 
-    if (data.success) {
-      setStaffLogs(data.logs);
+    if (logFilter !== 'ALL') {
+      params.set('staff_id', logFilter);
     }
-  }, []);
+    if (logTimeFrom) {
+      params.set('time_from', logTimeFrom);
+    }
+    if (logTimeTo) {
+      params.set('time_to', logTimeTo);
+    }
+
+    setLogsLoading(true);
+    try {
+      const response = await fetch(`https://api.gatesync.in/api/v1/staff/logs?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setStaffLogs(data.logs);
+        setLogsPagination({
+          page: Number(data.page) || page,
+          limit: Number(data.limit) || STAFF_LOGS_PAGE_SIZE,
+          total: Number(data.total) || 0,
+          total_pages: Number(data.total_pages) || 1,
+        });
+      }
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [logDateFrom, logDateTo, logFilter, logTimeFrom, logTimeTo]);
 
   const refreshModule = useCallback(async () => {
     setLoading(true);
     try {
-      await Promise.all([fetchMeta(), fetchStaff(), fetchLogs()]);
+      await Promise.all([fetchMeta(), fetchStaff()]);
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [fetchLogs, fetchMeta, fetchStaff]);
+  }, [fetchMeta, fetchStaff]);
 
   useEffect(() => {
-    refreshModule();
+    void refreshModule();
   }, [refreshModule]);
+
+  useEffect(() => {
+    void fetchLogs(1);
+  }, [fetchLogs]);
 
   const stats = useMemo(() => ([
     {
@@ -301,11 +358,9 @@ export default function StaffPage() {
     });
   }, [presenceFilter, searchTerm, staffList, typeFilter]);
 
-  const filteredLogs = useMemo(() => (
-    logFilter === 'ALL'
-      ? staffLogs
-      : staffLogs.filter((log) => String(log.staff_id) === logFilter)
-  ), [logFilter, staffLogs]);
+  const refreshStaffAndLogs = useCallback(async (page = logsPagination.page || 1) => {
+    await Promise.all([fetchStaff(), fetchLogs(page)]);
+  }, [fetchLogs, fetchStaff, logsPagination.page]);
 
   const openCreateModal = () => {
     setEditingStaff(null);
@@ -452,7 +507,7 @@ export default function StaffPage() {
       setShowModal(false);
       setEditingStaff(null);
       setForm(EMPTY_FORM);
-      await refreshModule();
+      await refreshStaffAndLogs();
     } catch (error) {
       console.error(error);
       alert('Unable to save staff member right now.');
@@ -478,7 +533,7 @@ export default function StaffPage() {
         return;
       }
 
-      await refreshModule();
+      await refreshStaffAndLogs();
     } catch (error) {
       console.error(error);
       alert('Unable to remove staff member right now.');
@@ -515,7 +570,7 @@ export default function StaffPage() {
         return;
       }
 
-      await refreshModule();
+      await refreshStaffAndLogs();
     } catch (error) {
       console.error(error);
       alert('Unable to update blacklist status right now.');
@@ -543,7 +598,7 @@ export default function StaffPage() {
         return;
       }
 
-      await refreshModule();
+      await refreshStaffAndLogs();
     } catch (error) {
       console.error(error);
       alert('Unable to check staff in right now.');
@@ -571,7 +626,7 @@ export default function StaffPage() {
         return;
       }
 
-      await refreshModule();
+      await refreshStaffAndLogs();
     } catch (error) {
       console.error(error);
       alert('Unable to check staff out right now.');
@@ -600,7 +655,7 @@ export default function StaffPage() {
         return;
       }
 
-      await refreshModule();
+      await refreshStaffAndLogs();
     } catch (error) {
       console.error(error);
       alert('Unable to update guard login right now.');
@@ -987,12 +1042,52 @@ export default function StaffPage() {
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">Attendance & Activity</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              GateSync tracks every entry, exit, total visit, and late arrival against the defined work schedule.
+              Filter by date and time range. By default only today&apos;s entries are loaded.
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            {filteredLogs.length} logs
+            {logsPagination.total} logs
           </span>
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-5">
+          <input
+            type="date"
+            value={logDateFrom}
+            onChange={(event) => setLogDateFrom(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+          />
+          <input
+            type="date"
+            value={logDateTo}
+            onChange={(event) => setLogDateTo(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+          />
+          <input
+            type="time"
+            value={logTimeFrom}
+            onChange={(event) => setLogTimeFrom(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+          />
+          <input
+            type="time"
+            value={logTimeTo}
+            onChange={(event) => setLogTimeTo(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const today = getTodayDateInput();
+              setLogDateFrom(today);
+              setLogDateTo(today);
+              setLogTimeFrom('');
+              setLogTimeTo('');
+            }}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          >
+            Reset to today
+          </button>
         </div>
 
         <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
@@ -1007,23 +1102,23 @@ export default function StaffPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading ? (
+              {loading || logsLoading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                     Loading attendance logs...
                   </td>
                 </tr>
-              ) : filteredLogs.length === 0 ? (
+              ) : staffLogs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                     No attendance logs found yet.
                   </td>
                 </tr>
-              ) : filteredLogs.map((log) => (
+              ) : staffLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40">
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-900 dark:text-slate-100">{log.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{log.type} Â· {log.phone}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{log.type} - {log.phone}</p>
                   </td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{formatDateTime(log.entry_time)}</td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{formatDateTime(log.exit_time)}</td>
@@ -1051,6 +1146,30 @@ export default function StaffPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Showing {staffLogs.length} records on page {logsPagination.page} of {logsPagination.total_pages}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void fetchLogs(logsPagination.page - 1)}
+              disabled={logsLoading || logsPagination.page <= 1}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => void fetchLogs(logsPagination.page + 1)}
+              disabled={logsLoading || logsPagination.page >= logsPagination.total_pages}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
