@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TabBar, type ResidentTab } from '../components/TabBar';
+import { subscribeToNotificationIntents } from '../lib/notifications';
 import { colors } from '../theme';
 import type { ResidentActionRoute } from '../types/navigation';
 import { ResidentComplaintsScreen } from './ResidentComplaintsScreen';
@@ -14,6 +15,19 @@ import { ResidentVisitorsScreen } from './ResidentVisitorsScreen';
 export function ResidentShell() {
   const [activeTab, setActiveTab] = useState<ResidentTab>('home');
   const [activeAction, setActiveAction] = useState<ResidentActionRoute | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToNotificationIntents((intent) => {
+      if (intent.type !== 'visitor_pending_approval') {
+        return;
+      }
+
+      setActiveAction(null);
+      setActiveTab('visitors');
+    });
+
+    return unsubscribe;
+  }, []);
 
   const handleTabChange = (nextTab: ResidentTab) => {
     setActiveAction(null);

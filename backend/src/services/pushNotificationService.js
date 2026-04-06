@@ -103,7 +103,15 @@ const postExpoMessages = async (messages = []) => {
     };
 };
 
-async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = 'default', categoryId }) {
+async function sendPushToUsers({
+    userIds = [],
+    title,
+    body,
+    data = {},
+    sound = 'default',
+    categoryId,
+    channelId = 'default',
+}) {
     const tokens = await fetchActiveTokensForUsers(userIds);
     if (!tokens.length) {
         return { attempted: 0, sent: 0, invalid_tokens: [] };
@@ -113,11 +121,11 @@ async function sendPushToUsers({ userIds = [], title, body, data = {}, sound = '
         to: token,
         title,
         body,
-        data,
+        data: categoryId ? { ...data, categoryId } : data,
         sound,
         priority: 'high',
-        channelId: 'default',
-        ...(categoryId ? { categoryId } : {}),
+        channelId,
+        ...(categoryId ? { categoryId, categoryIdentifier: categoryId } : {}),
     }));
 
     return postExpoMessages(messages);
@@ -160,19 +168,19 @@ async function getSocietyGuardUserIds(societyId) {
     return rows.map((row) => row.id);
 }
 
-async function sendPushToFlatResidents({ flatId, title, body, data = {}, categoryId }) {
+async function sendPushToFlatResidents({ flatId, title, body, data = {}, categoryId, sound, channelId }) {
     const residentUserIds = await getFlatResidentUserIds(flatId);
-    return sendPushToUsers({ userIds: residentUserIds, title, body, data, categoryId });
+    return sendPushToUsers({ userIds: residentUserIds, title, body, data, categoryId, sound, channelId });
 }
 
-async function sendPushToFlatApprovalResidents({ flatId, title, body, data = {}, categoryId }) {
+async function sendPushToFlatApprovalResidents({ flatId, title, body, data = {}, categoryId, sound, channelId }) {
     const residentUserIds = await getFlatApprovalResidentUserIds(flatId);
-    return sendPushToUsers({ userIds: residentUserIds, title, body, data, categoryId });
+    return sendPushToUsers({ userIds: residentUserIds, title, body, data, categoryId, sound, channelId });
 }
 
-async function sendPushToSocietyGuards({ societyId, title, body, data = {}, categoryId }) {
+async function sendPushToSocietyGuards({ societyId, title, body, data = {}, categoryId, sound, channelId }) {
     const guardUserIds = await getSocietyGuardUserIds(societyId);
-    return sendPushToUsers({ userIds: guardUserIds, title, body, data, categoryId });
+    return sendPushToUsers({ userIds: guardUserIds, title, body, data, categoryId, sound, channelId });
 }
 
 module.exports = {

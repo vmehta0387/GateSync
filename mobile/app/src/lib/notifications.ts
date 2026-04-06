@@ -16,8 +16,20 @@ const VISITOR_APPROVAL_CATEGORY_ID = 'VISITOR_APPROVAL';
 const APPROVE_VISITOR_ACTION_ID = 'APPROVE_VISITOR';
 const DENY_VISITOR_ACTION_ID = 'DENY_VISITOR';
 
+export type NotificationIntent =
+  | {
+      type: 'visitor_pending_approval';
+      logId: number;
+      flatId?: number;
+    };
+
+type NotificationIntentListener = (intent: NotificationIntent) => void;
+
 let notificationResponseSubscription: Notifications.EventSubscription | null = null;
 let categoriesReadyPromise: Promise<void> | null = null;
+let lastHandledResponseKey: string | null = null;
+let pendingNotificationIntent: NotificationIntent | null = null;
+const notificationIntentListeners = new Set<NotificationIntentListener>();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -60,6 +72,16 @@ async function ensureAndroidChannel() {
     importance: Notifications.AndroidImportance.HIGH,
     sound: 'default',
     vibrationPattern: [0, 250, 250, 250],
+  });
+
+  await Notifications.setNotificationChannelAsync('visitor-approval', {
+    name: 'Visitor approvals',
+    description: 'Urgent visitor approval requests at the gate',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: 'visitor_approval.wav',
+    vibrationPattern: [0, 300, 200, 300, 200, 300],
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
 }
 
@@ -107,6 +129,55 @@ function getNotificationLogId(response: Notifications.NotificationResponse) {
   return Number.isInteger(logId) && logId > 0 ? logId : 0;
 }
 
+function getNotificationFlatId(response: Notifications.NotificationResponse) {
+  const data = getNotificationData(response);
+  const flatId = Number(
+    typeof data.flat_id === 'number' || typeof data.flat_id === 'string'
+      ? data.flat_id
+      : 0,
+  );
+
+  return Number.isInteger(flatId) && flatId > 0 ? flatId : 0;
+}
+
+function buildIntentFromResponse(response: Notifications.NotificationResponse): NotificationIntent | null {
+  const data = getNotificationData(response);
+  if (data.type !== 'visitor_pending_approval') {
+    return null;
+  }
+
+  const logId = getNotificationLogId(response);
+  if (!logId) {
+    return null;
+  }
+
+  const flatId = getNotificationFlatId(response);
+  return {
+    type: 'visitor_pending_approval',
+    logId,
+    ...(flatId ? { flatId } : {}),
+  };
+}
+
+function buildResponseKey(response: Notifications.NotificationResponse) {
+  return `${response.notification.request.identifier}:${response.actionIdentifier}`;
+}
+
+function dispatchNotificationIntent(intent: NotificationIntent) {
+  if (!notificationIntentListeners.size) {
+    pendingNotificationIntent = intent;
+    return;
+  }
+
+  notificationIntentListeners.forEach((listener) => {
+    try {
+      listener(intent);
+    } catch {
+      // Avoid one listener failure from affecting others.
+    }
+  });
+}
+
 async function performVisitorApprovalAction(logId: number, actionIdentifier: string) {
   if (!logId) {
     return;
@@ -123,7 +194,22 @@ async function performVisitorApprovalAction(logId: number, actionIdentifier: str
 }
 
 async function handleNotificationResponse(response: Notifications.NotificationResponse) {
+  const responseKey = buildResponseKey(response);
+  if (lastHandledResponseKey === responseKey) {
+    return;
+  }
+  lastHandledResponseKey = responseKey;
+
   const actionIdentifier = response.actionIdentifier;
+  const intent = buildIntentFromResponse(response);
+
+  if (actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
+    if (intent) {
+      dispatchNotificationIntent(intent);
+    }
+    return;
+  }
+
   if (
     actionIdentifier !== APPROVE_VISITOR_ACTION_ID &&
     actionIdentifier !== DENY_VISITOR_ACTION_ID
@@ -264,4 +350,22 @@ export async function initializeNotificationActions() {
       void handleNotificationResponse(response);
     });
   }
+
+  const initialResponse = await Notifications.getLastNotificationResponseAsync();
+  if (initialResponse) {
+    await handleNotificationResponse(initialResponse);
+  }
+}
+
+export function subscribeToNotificationIntents(listener: NotificationIntentListener) {
+  notificationIntentListeners.add(listener);
+
+  if (pendingNotificationIntent) {
+    listener(pendingNotificationIntent);
+    pendingNotificationIntent = null;
+  }
+
+  return () => {
+    notificationIntentListeners.delete(listener);
+  };
 }

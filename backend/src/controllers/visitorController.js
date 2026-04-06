@@ -619,6 +619,8 @@ const createWalkInLog = async ({ req, flatTarget, payload, rules: providedRules,
                 body: `${payload.name} (${payload.purpose}) is waiting at ${flat.block_name}-${flat.flat_number}.`,
                 data: { type: 'visitor_pending_approval', log_id: result.insertId, flat_id: flatId, status },
                 categoryId: 'VISITOR_APPROVAL',
+                sound: 'visitor_approval.wav',
+                channelId: 'visitor-approval',
             });
             return;
         }
