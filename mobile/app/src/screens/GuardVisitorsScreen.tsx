@@ -156,6 +156,13 @@ export function GuardVisitorsScreen({
     ? selectedDeliveryFlatIds.length > 0
     : Boolean(walkIn.block_name && walkIn.flat_number);
 
+  const resetWalkInForm = () => {
+    setWalkIn({ ...initialWalkIn, visitor_photo_url: '' });
+    setSelectedDeliveryFlatIds([]);
+    setFlatSearch('');
+    setVisitorPhotoPreview('');
+  };
+
   const insideVisitorsSorted = useMemo(
     () => [...activeVisitors].sort((a, b) => {
       const aTime = a.entry_time ? new Date(a.entry_time).getTime() : 0;
@@ -278,19 +285,20 @@ export function GuardVisitorsScreen({
   const submitWalkIn = async () => {
     const primaryFlat = selectedDeliveryFlats[0];
     setBusy(true);
-    await onWalkInSubmit({
-      ...walkIn,
-      phone_number: walkIn.phone_number.replace(/\D/g, '').slice(0, 10),
-      block_name: walkIn.purpose === 'Delivery' ? primaryFlat?.block_name || walkIn.block_name : walkIn.block_name,
-      flat_number: walkIn.purpose === 'Delivery' ? primaryFlat?.flat_number || walkIn.flat_number : walkIn.flat_number,
-      flat_ids: walkIn.purpose === 'Delivery' ? selectedDeliveryFlatIds : undefined,
-      vehicle_number: walkIn.vehicle_number?.toUpperCase(),
-    });
-    setWalkIn(initialWalkIn);
-    setSelectedDeliveryFlatIds([]);
-    setFlatSearch('');
-    setVisitorPhotoPreview('');
-    setBusy(false);
+    try {
+      await onWalkInSubmit({
+        ...walkIn,
+        visitor_photo_url: walkIn.visitor_photo_url || undefined,
+        phone_number: walkIn.phone_number.replace(/\D/g, '').slice(0, 10),
+        block_name: walkIn.purpose === 'Delivery' ? primaryFlat?.block_name || walkIn.block_name : walkIn.block_name,
+        flat_number: walkIn.purpose === 'Delivery' ? primaryFlat?.flat_number || walkIn.flat_number : walkIn.flat_number,
+        flat_ids: walkIn.purpose === 'Delivery' ? selectedDeliveryFlatIds : undefined,
+        vehicle_number: walkIn.vehicle_number?.toUpperCase(),
+      });
+      resetWalkInForm();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const startResidentCall = async (logId: number) => {
@@ -463,9 +471,22 @@ export function GuardVisitorsScreen({
                 </View>
               </View>
             ) : null}
-            <Pressable onPress={() => void capturePhoto()} style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>{visitorPhotoPreview ? 'Retake Photo' : 'Take Visitor Photo'}</Text>
-            </Pressable>
+            <View style={styles.photoActions}>
+              <Pressable onPress={() => void capturePhoto()} style={styles.secondaryAction}>
+                <Text style={styles.secondaryActionText}>{visitorPhotoPreview ? 'Retake Photo' : 'Take Visitor Photo'}</Text>
+              </Pressable>
+              {visitorPhotoPreview || walkIn.visitor_photo_url ? (
+                <Pressable
+                  onPress={() => {
+                    setVisitorPhotoPreview('');
+                    setWalkIn((current) => ({ ...current, visitor_photo_url: '' }));
+                  }}
+                  style={styles.clearPhotoButton}
+                >
+                  <Text style={styles.clearPhotoButtonText}>Remove</Text>
+                </Pressable>
+              ) : null}
+            </View>
 
             <Text style={styles.fieldLabel}>Tower or block</Text>
             <View style={styles.selectorWrap}>
@@ -764,7 +785,10 @@ const styles = StyleSheet.create({
   photoCopy: { flex: 1, gap: 4 },
   photoTitle: { color: colors.primaryDeep, fontSize: 14, fontWeight: '800' },
   photoSubtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
-  secondaryAction: { borderRadius: 16, borderWidth: 1, borderColor: '#bfd3ff', backgroundColor: '#eef4ff', alignItems: 'center', paddingVertical: 13 },
+  photoActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  secondaryAction: { flex: 1, borderRadius: 16, borderWidth: 1, borderColor: '#bfd3ff', backgroundColor: '#eef4ff', alignItems: 'center', paddingVertical: 13 },
+  clearPhotoButton: { borderRadius: 16, borderWidth: 1, borderColor: '#f0b3b3', backgroundColor: '#fff3f3', paddingHorizontal: 14, paddingVertical: 13 },
+  clearPhotoButtonText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
   secondaryActionText: { color: colors.primaryDeep, fontSize: 13, fontWeight: '800' },
   submitButton: { borderRadius: 18, backgroundColor: colors.secondary, alignItems: 'center', paddingVertical: 15 },
   darkButton: { backgroundColor: colors.secondary },

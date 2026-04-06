@@ -171,7 +171,7 @@ const mapVisitorLogRow = (row) => ({
     visitor_id: row.visitor_id,
     visitor_name: row.visitor_name,
     visitor_phone: row.visitor_phone,
-    visitor_photo_url: row.visitor_photo_url || row.master_photo_url || '',
+    visitor_photo_url: row.visitor_photo_url || '',
     block_name: row.block_name,
     flat_number: row.flat_number,
     flat_id: row.flat_id,

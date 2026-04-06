@@ -1350,44 +1350,30 @@ function getInvoiceTone(status: Invoice['status']) {
   return 'warning';
 }
 
-function formatMoney(value: number | null | undefined) {
-  return Number(value || 0).toFixed(2);
-}
-
-function buildInvoiceShareMessage(invoice: Invoice) {
-  const invoiceCode = invoice.invoice_number || `INV-${invoice.id}`;
-  const totalAmount = invoice.total_amount ?? invoice.amount;
-  const balanceAmount = invoice.balance_amount ?? invoice.amount;
-
-  return [
-    `GateSync Invoice ${invoiceCode}`,
-    `Flat: ${invoice.block_name}-${invoice.flat_number}`,
-    `Month: ${invoice.month_year}`,
-    `Status: ${invoice.status}`,
-    `Due date: ${invoice.due_date || 'Not set'}`,
-    `Total: Rs ${formatMoney(totalAmount)}`,
-    `Balance: Rs ${formatMoney(balanceAmount)}`,
-    invoice.payment_reference ? `Reference: ${invoice.payment_reference}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
 async function handleInvoiceDownload(invoice: Invoice) {
-  if (invoice.pdf_url) {
-    await openLink(invoice.pdf_url, invoice.invoice_number || 'Invoice PDF');
+  const pdfUrl = resolveAbsoluteUrl(invoice.pdf_url || '');
+  if (!pdfUrl) {
+    Alert.alert(
+      'Invoice PDF unavailable',
+      'Invoice PDF is being generated. Please refresh in a few seconds and try again.',
+    );
     return;
   }
 
   try {
-    await Share.share({
-      title: invoice.invoice_number || `Invoice ${invoice.id}`,
-      message: buildInvoiceShareMessage(invoice),
-    });
+    if (Platform.OS === 'ios') {
+      await Share.share({
+        title: invoice.invoice_number || `Invoice ${invoice.id}`,
+        url: pdfUrl,
+      });
+      return;
+    }
+
+    await openLink(pdfUrl, invoice.invoice_number || 'Invoice PDF');
   } catch {
     Alert.alert(
-      'Invoice PDF unavailable',
-      'PDF file is not attached for this invoice yet. You can still view invoice details on this screen.',
+      'Unable to open invoice',
+      'Could not open this invoice PDF right now. Please try again.',
     );
   }
 }

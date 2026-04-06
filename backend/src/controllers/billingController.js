@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { generateAndStoreInvoicePdf } = require('../services/invoicePdfService');
 
 const BILLING_TYPES = ['MonthlyMaintenance', 'QuarterlyMaintenance', 'YearlyMaintenance', 'OneTimeCharge', 'Penalty', 'Fine'];
 const BILLING_FREQUENCIES = ['Monthly', 'Quarterly', 'Yearly', 'OneTime'];
@@ -258,6 +259,126 @@ const fetchInvoiceRows = async ({ societyId, role, userId, filters = {}, invoice
     return syncInvoiceFinancials(rows);
 };
 
+const fetchInvoicePdfPayload = async ({ invoiceId, societyId }) => {
+    const [invoiceRows] = await db.query(
+        `SELECT
+            i.id,
+            i.invoice_number,
+            i.month_year,
+            i.invoice_date,
+            i.due_date,
+            i.generated_at,
+            i.status,
+            i.subtotal_amount,
+            i.penalty_amount,
+            i.adjustment_amount,
+            i.total_amount,
+            i.paid_amount,
+            i.balance_amount,
+            i.notes,
+            i.flat_id,
+            f.block_name,
+            f.flat_number,
+            f.flat_type,
+            f.area_sqft,
+            s.name AS society_name,
+            s.address AS society_address
+         FROM invoices i
+         INNER JOIN flats f ON f.id = i.flat_id
+         INNER JOIN societies s ON s.id = i.society_id
+         WHERE i.id = ? AND i.society_id = ?
+         LIMIT 1`,
+        [invoiceId, societyId]
+    );
+
+    const invoice = invoiceRows[0];
+    if (!invoice) return null;
+
+    const [[lineItems], [residents]] = await Promise.all([
+        db.query(
+            `SELECT label, amount, calculation_mode, sort_order
+             FROM invoice_line_items
+             WHERE invoice_id = ?
+             ORDER BY sort_order ASC, id ASC`,
+            [invoiceId]
+        ),
+        db.query(
+            `SELECT u.name, u.phone_number, uf.access_role
+             FROM user_flats uf
+             INNER JOIN users u ON u.id = uf.user_id
+             WHERE uf.flat_id = ?
+               AND u.society_id = ?
+               AND u.role = 'RESIDENT'
+               AND u.status = 'ACTIVE'
+             ORDER BY CASE uf.access_role WHEN 'Primary' THEN 0 ELSE 1 END, u.id ASC
+             LIMIT 1`,
+            [invoice.flat_id, societyId]
+        ),
+    ]);
+
+    const resident = residents[0] || null;
+    return {
+        id: invoice.id,
+        society_id: societyId,
+        invoice_number: invoice.invoice_number || '',
+        month_year: invoice.month_year || '',
+        invoice_date: formatDate(invoice.invoice_date),
+        due_date: formatDate(invoice.due_date),
+        generated_at: formatDateTime(invoice.generated_at),
+        status: invoice.status || 'Unpaid',
+        subtotal_amount: toNumber(invoice.subtotal_amount),
+        penalty_amount: toNumber(invoice.penalty_amount),
+        adjustment_amount: toNumber(invoice.adjustment_amount),
+        total_amount: toNumber(invoice.total_amount),
+        paid_amount: toNumber(invoice.paid_amount),
+        balance_amount: toNumber(invoice.balance_amount),
+        notes: invoice.notes || '',
+        block_name: invoice.block_name || '',
+        flat_number: invoice.flat_number || '',
+        flat_type: invoice.flat_type || '',
+        area_sqft: invoice.area_sqft !== null ? toNumber(invoice.area_sqft) : null,
+        society_name: invoice.society_name || 'GateSync Society',
+        society_address: invoice.society_address || '',
+        resident_name: resident?.name || '',
+        resident_phone: resident?.phone_number || '',
+        line_items: Array.isArray(lineItems)
+            ? lineItems.map((item) => ({
+                label: item.label,
+                amount: toNumber(item.amount),
+                calculation_mode: item.calculation_mode || 'fixed',
+                sort_order: item.sort_order || 0,
+            }))
+            : [],
+    };
+};
+
+const refreshInvoicePdf = async ({ invoiceId, societyId }) => {
+    const payload = await fetchInvoicePdfPayload({ invoiceId, societyId });
+    if (!payload) return null;
+
+    const pdfUrl = await generateAndStoreInvoicePdf(payload);
+    await db.query(
+        `UPDATE invoices SET pdf_url = ? WHERE id = ? AND society_id = ?`,
+        [pdfUrl, invoiceId, societyId]
+    );
+    return pdfUrl;
+};
+
+const ensureInvoicePdfUrls = async ({ invoiceRows, societyId }) => {
+    if (!Array.isArray(invoiceRows) || !invoiceRows.length) return;
+
+    for (const row of invoiceRows) {
+        if (row.pdf_url) continue;
+
+        try {
+            const pdfUrl = await refreshInvoicePdf({ invoiceId: row.id, societyId });
+            if (pdfUrl) row.pdf_url = pdfUrl;
+        } catch (error) {
+            console.error(`Failed to auto-generate invoice PDF for invoice ${row.id}:`, error.message);
+        }
+    }
+};
+
 const hydrateInvoices = async (invoiceRows) => {
     if (!invoiceRows.length) return [];
 
@@ -478,6 +599,12 @@ const insertInvoiceWithItems = async ({ societyId, flat, monthYear, dueDate, not
         );
     }
 
+    try {
+        await refreshInvoicePdf({ invoiceId, societyId });
+    } catch (error) {
+        console.error(`Failed to generate PDF for invoice ${invoiceId}:`, error.message);
+    }
+
     return invoiceId;
 };
 
@@ -489,6 +616,7 @@ exports.getInvoices = async (req, res) => {
             userId: req.user.id,
             filters: req.query,
         });
+        await ensureInvoicePdfUrls({ invoiceRows: rows, societyId: req.user.society_id });
         const invoices = await hydrateInvoices(rows);
         return res.status(200).json({ success: true, invoices });
     } catch (error) {
@@ -831,6 +959,11 @@ exports.payInvoice = async (req, res) => {
         );
         await db.query(`UPDATE invoices SET payment_method = ?, payment_reference = ? WHERE id = ?`, [normalizeOptionalString(req.body.payment_method) || 'Online', paymentReference, invoiceId]);
         await fetchInvoiceRows({ societyId: req.user.society_id, role: 'ADMIN', userId: req.user.id, invoiceId });
+        try {
+            await refreshInvoicePdf({ invoiceId, societyId: req.user.society_id });
+        } catch (pdfError) {
+            console.error(`Failed to refresh PDF after payment for invoice ${invoiceId}:`, pdfError.message);
+        }
 
         return res.status(200).json({ success: true, message: 'Payment recorded successfully' });
     } catch (error) {
@@ -859,6 +992,11 @@ exports.adjustInvoice = async (req, res) => {
             [invoiceId, adjustmentType, amount, normalizeOptionalString(req.body.reason), req.user.id]
         );
         await fetchInvoiceRows({ societyId: req.user.society_id, role: 'ADMIN', userId: req.user.id, invoiceId });
+        try {
+            await refreshInvoicePdf({ invoiceId, societyId: req.user.society_id });
+        } catch (pdfError) {
+            console.error(`Failed to refresh PDF after adjustment for invoice ${invoiceId}:`, pdfError.message);
+        }
 
         return res.status(200).json({ success: true, message: `${adjustmentType} applied successfully` });
     } catch (error) {

@@ -90,6 +90,14 @@ export function VisitorsScreen({
     ? selectedDeliveryFlatIds.length > 0
     : Boolean(walkIn.block_name && walkIn.flat_number);
 
+  const resetWalkInForm = () => {
+    setWalkIn({ ...initialWalkIn, visitor_photo_url: '' });
+    setSelectedDeliveryFlatIds([]);
+    setFlatSearch('');
+    setShowOptionalDetails(false);
+    setVisitorPhotoPreview('');
+  };
+
   const filteredLogs = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) {
@@ -138,20 +146,20 @@ export function VisitorsScreen({
       : null;
 
     setBusy(true);
-    await onWalkInSubmit({
-      ...walkIn,
-      block_name: requiresMultipleFlats ? primaryFlat?.block_name || walkIn.block_name : walkIn.block_name,
-      flat_number: requiresMultipleFlats ? primaryFlat?.flat_number || walkIn.flat_number : walkIn.flat_number,
-      flat_ids: requiresMultipleFlats ? selectedDeliveryFlatIds : undefined,
-      phone_number: walkIn.phone_number.replace(/\D/g, '').slice(0, 10),
-      vehicle_number: walkIn.vehicle_number?.toUpperCase(),
-    });
-    setWalkIn(initialWalkIn);
-    setSelectedDeliveryFlatIds([]);
-    setFlatSearch('');
-    setShowOptionalDetails(false);
-    setVisitorPhotoPreview('');
-    setBusy(false);
+    try {
+      await onWalkInSubmit({
+        ...walkIn,
+        visitor_photo_url: walkIn.visitor_photo_url || undefined,
+        block_name: requiresMultipleFlats ? primaryFlat?.block_name || walkIn.block_name : walkIn.block_name,
+        flat_number: requiresMultipleFlats ? primaryFlat?.flat_number || walkIn.flat_number : walkIn.flat_number,
+        flat_ids: requiresMultipleFlats ? selectedDeliveryFlatIds : undefined,
+        phone_number: walkIn.phone_number.replace(/\D/g, '').slice(0, 10),
+        vehicle_number: walkIn.vehicle_number?.toUpperCase(),
+      });
+      resetWalkInForm();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleCaptureVisitorPhoto = async () => {
