@@ -13,7 +13,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gatesync.mobile"
+      "bundleIdentifier": "com.gatesync.mobile",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow GateSync to convert guard speech to text for visitor names.",
+        "NSMicrophoneUsageDescription": "Allow GateSync to use the microphone for guard voice entry.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +30,12 @@
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {

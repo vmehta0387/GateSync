@@ -121,11 +121,11 @@ async function sendPushToUsers({
         to: token,
         title,
         body,
-        data: categoryId ? { ...data, categoryId } : data,
+        data: categoryId ? { ...data, notification_category_id: categoryId } : data,
         sound,
         priority: 'high',
         channelId,
-        ...(categoryId ? { categoryId, categoryIdentifier: categoryId } : {}),
+        ...(categoryId ? { categoryId } : {}),
     }));
 
     return postExpoMessages(messages);

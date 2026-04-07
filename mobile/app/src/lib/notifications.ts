@@ -12,7 +12,8 @@ import {
 } from './storage';
 import { StoredSession } from '../types/auth';
 
-const VISITOR_APPROVAL_CATEGORY_ID = 'VISITOR_APPROVAL';
+const VISITOR_APPROVAL_CATEGORY_ID = 'visitor_approval';
+const LEGACY_VISITOR_APPROVAL_CATEGORY_ID = 'VISITOR_APPROVAL';
 const APPROVE_VISITOR_ACTION_ID = 'APPROVE_VISITOR';
 const DENY_VISITOR_ACTION_ID = 'DENY_VISITOR';
 
@@ -90,9 +91,10 @@ async function ensureNotificationCategories() {
     return categoriesReadyPromise;
   }
 
-  categoriesReadyPromise = Notifications.setNotificationCategoryAsync(
-    VISITOR_APPROVAL_CATEGORY_ID,
-    [
+  categoriesReadyPromise = (async () => {
+    await ensureAndroidChannel();
+
+    const actions: Notifications.NotificationAction[] = [
       {
         identifier: APPROVE_VISITOR_ACTION_ID,
         buttonTitle: 'Approve',
@@ -108,8 +110,19 @@ async function ensureNotificationCategories() {
           opensAppToForeground: true,
         },
       },
-    ],
-  ).then(() => undefined);
+    ];
+
+    await Promise.all([
+      Notifications.setNotificationCategoryAsync(VISITOR_APPROVAL_CATEGORY_ID, actions),
+      // Keep old category id for backwards compatibility with already-deployed backend payloads.
+      Notifications.setNotificationCategoryAsync(LEGACY_VISITOR_APPROVAL_CATEGORY_ID, actions),
+    ]);
+  })()
+    .catch((error) => {
+      // Reset so the app can retry category registration later.
+      categoriesReadyPromise = null;
+      throw error;
+    });
 
   return categoriesReadyPromise;
 }
