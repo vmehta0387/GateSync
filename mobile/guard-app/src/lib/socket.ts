@@ -10,7 +10,9 @@ function getSocket() {
   if (!socket) {
     socket = io(SOCKET_URL, {
       autoConnect: false,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      timeout: 10000,
     });
   }
 
@@ -27,11 +29,16 @@ export function subscribeToGuardLiveUpdates(societyId: number, onUpdate: () => v
     });
   };
 
+  const handleConnect = () => {
+    joinRooms();
+  };
+
+  sharedSocket.on('connect', handleConnect);
+
   if (sharedSocket.connected) {
     joinRooms();
   } else {
     sharedSocket.connect();
-    sharedSocket.once('connect', joinRooms);
   }
 
   [...VISITOR_EVENTS, ...SECURITY_EVENTS].forEach((eventName) => {
@@ -39,6 +46,8 @@ export function subscribeToGuardLiveUpdates(societyId: number, onUpdate: () => v
   });
 
   return () => {
+    sharedSocket.off('connect', handleConnect);
+
     [...VISITOR_EVENTS, ...SECURITY_EVENTS].forEach((eventName) => {
       sharedSocket.off(eventName, onUpdate);
     });

@@ -166,6 +166,18 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
     });
   }, [flats, loadAll, session?.user?.id]);
 
+  useEffect(() => {
+    if (!session?.user?.id) {
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      void loadAll();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [loadAll, session?.user?.id]);
+
   const upcomingVisitors = useMemo(
     () => logs.filter((log) => log.status === 'Approved' && (log.entry_method === 'PreApproved' || Boolean(log.passcode))),
     [logs],

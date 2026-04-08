@@ -50,11 +50,16 @@ function subscribeToRooms(rooms: string[], events: readonly string[], onUpdate: 
     });
   };
 
+  const handleConnect = () => {
+    joinRooms();
+  };
+
+  sharedSocket.on('connect', handleConnect);
+
   if (sharedSocket.connected) {
     joinRooms();
   } else {
     sharedSocket.connect();
-    sharedSocket.once('connect', joinRooms);
   }
 
   events.forEach((eventName) => {
@@ -62,6 +67,8 @@ function subscribeToRooms(rooms: string[], events: readonly string[], onUpdate: 
   });
 
   return () => {
+    sharedSocket.off('connect', handleConnect);
+
     events.forEach((eventName) => {
       sharedSocket.off(eventName, onUpdate);
     });

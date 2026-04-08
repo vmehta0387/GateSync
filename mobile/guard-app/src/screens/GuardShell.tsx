@@ -86,6 +86,18 @@ export function GuardShell() {
     });
   }, [loadAll, session?.user.society_id]);
 
+  useEffect(() => {
+    if (!session?.user.society_id) {
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      void loadAll();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [loadAll, session?.user.society_id]);
+
   const activeShift = useMemo(() => shifts.find((shift) => shift.status === 'OnDuty') || null, [shifts]);
   const upcomingShift = useMemo(() => shifts.find((shift) => shift.status === 'Scheduled') || null, [shifts]);
   const approvedArrivals = useMemo(() => logs.filter((log) => log.status === 'Approved'), [logs]);
