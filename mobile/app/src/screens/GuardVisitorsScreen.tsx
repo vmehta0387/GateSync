@@ -189,6 +189,13 @@ export function GuardVisitorsScreen({
     [filteredInsideVisitors, visibleInsideCount],
   );
   const hasMoreInsideVisitors = visibleInsideVisitors.length < filteredInsideVisitors.length;
+  const visitorPreviewUri = useMemo(() => {
+    if (visitorPhotoPreview) return visitorPhotoPreview;
+    if (!walkIn.visitor_photo_url) return '';
+    return walkIn.visitor_photo_url.startsWith('http')
+      ? walkIn.visitor_photo_url
+      : `${API_BASE_URL}${walkIn.visitor_photo_url}`;
+  }, [visitorPhotoPreview, walkIn.visitor_photo_url]);
 
   useEffect(() => {
     setVisiblePastDayCount(2);
@@ -347,7 +354,8 @@ export function GuardVisitorsScreen({
     }
 
     setWalkIn((current) => ({ ...current, visitor_photo_url: upload.file?.file_path || '' }));
-    setVisitorPhotoPreview(upload.file.url || asset.uri);
+    // Show local photo immediately; server URL can be used later from saved path.
+    setVisitorPhotoPreview(asset.uri);
   };
 
   const handleVoiceNameInput = async () => {
@@ -462,9 +470,9 @@ export function GuardVisitorsScreen({
             <LabeledInput label="Mobile number" value={walkIn.phone_number} onChangeText={(value) => setWalkIn((current) => ({ ...current, phone_number: value.replace(/\D/g, '') }))} placeholder="10-digit mobile number" keyboardType="number-pad" maxLength={10} />
 
             <Text style={styles.fieldLabel}>Visitor photo</Text>
-            {visitorPhotoPreview ? (
+            {visitorPreviewUri ? (
               <View style={styles.photoCard}>
-                <Image source={{ uri: visitorPhotoPreview.startsWith('http') ? visitorPhotoPreview : `${API_BASE_URL}${walkIn.visitor_photo_url || ''}` }} style={styles.photoPreview} />
+                <Image source={{ uri: visitorPreviewUri }} style={styles.photoPreview} />
                 <View style={styles.photoCopy}>
                   <Text style={styles.photoTitle}>Photo captured</Text>
                   <Text style={styles.photoSubtitle}>Retake if the face is not clear.</Text>

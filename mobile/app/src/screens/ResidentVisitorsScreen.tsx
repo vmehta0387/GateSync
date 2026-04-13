@@ -1,9 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Contacts from 'expo-contacts';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  AppState,
   Image,
   Linking,
   Modal,
@@ -127,11 +128,12 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
   const [contactsVisible, setContactsVisible] = useState(false);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
-  const [showExpectedDatePicker, setShowExpectedDatePicker] = useState(false);
-  const [showExpectedTimePicker, setShowExpectedTimePicker] = useState(false);
+  const [iosPickerMode, setIosPickerMode] = useState<'date' | 'time' | null>(null);
 
-  const loadAll = useCallback(async () => {
-    setRefreshing(true);
+  const loadAll = useCallback(async (mode: 'refresh' | 'silent' = 'silent') => {
+    if (mode === 'refresh') {
+      setRefreshing(true);
+    }
     const [flatsRes, logsRes, pendingRes] = await Promise.all([
       fetchResidentFlats(),
       fetchVisitorLogs(),
@@ -152,7 +154,7 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
   }, []);
 
   useEffect(() => {
-    void loadAll();
+    void loadAll('silent');
   }, [loadAll]);
 
   useEffect(() => {
@@ -162,7 +164,7 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
 
     const rooms = [`resident_${session.user.id}`, ...flats.map((flat) => `flat_${flat.flat_id}`)];
     return subscribeToResidentVisitorUpdates(rooms, () => {
-      void loadAll();
+      void loadAll('silent');
     });
   }, [flats, loadAll, session?.user?.id]);
 
@@ -171,11 +173,13 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
       return undefined;
     }
 
-    const interval = setInterval(() => {
-      void loadAll();
-    }, 3000);
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void loadAll('silent');
+      }
+    });
 
-    return () => clearInterval(interval);
+    return () => subscription.remove();
   }, [loadAll, session?.user?.id]);
 
   const upcomingVisitors = useMemo(
@@ -311,7 +315,6 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
   };
 
   const handleExpectedDateChange = (_event: DateTimePickerEvent, nextDate?: Date) => {
-    setShowExpectedDatePicker(Platform.OS === 'ios');
     if (!nextDate) {
       return;
     }
@@ -323,7 +326,6 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
   };
 
   const handleExpectedTimeChange = (_event: DateTimePickerEvent, nextTime?: Date) => {
-    setShowExpectedTimePicker(Platform.OS === 'ios');
     if (!nextTime) {
       return;
     }
@@ -333,6 +335,48 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
       expected_time: updateTimeOnly(current.expected_time || getDefaultPassExpiryIso(), nextTime),
     }));
   };
+
+  const openExpectedDatePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        mode: 'date',
+        value: selectedExpectedDate,
+        minimumDate: new Date(),
+        onChange: (event, value) => {
+          if (event.type !== 'set' || !value) return;
+          setForm((current) => ({
+            ...current,
+            expected_time: updateDateOnly(current.expected_time || getDefaultPassExpiryIso(), value),
+          }));
+        },
+      });
+      return;
+    }
+
+    setIosPickerMode('date');
+  };
+
+  const openExpectedTimePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        mode: 'time',
+        value: selectedExpectedDate,
+        is24Hour: false,
+        onChange: (event, value) => {
+          if (event.type !== 'set' || !value) return;
+          setForm((current) => ({
+            ...current,
+            expected_time: updateTimeOnly(current.expected_time || getDefaultPassExpiryIso(), value),
+          }));
+        },
+      });
+      return;
+    }
+
+    setIosPickerMode('time');
+  };
+
+  const activeIosPickerMode = Platform.OS === 'ios' ? iosPickerMode : null;
 
   const submitPass = async () => {
     const selectedFlat = flats.find((flat) => String(flat.flat_id) === form.flat_id);
@@ -369,7 +413,7 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
       ...initialForm,
       flat_id: current.flat_id,
     }));
-    await loadAll();
+    await loadAll('silent');
   };
 
   const handleDecision = async (logId: number, nextAction: 'approve' | 'deny') => {
@@ -378,7 +422,7 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
       Alert.alert('Action failed', response.message || 'Please try again.');
       return;
     }
-    await loadAll();
+    await loadAll('silent');
   };
 
   const sharePassMessage = useCallback(async (mode: 'whatsapp' | 'share', pass: CreatedPass | null = activePassCard) => {
@@ -427,7 +471,7 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll()} />}>
+      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll('refresh')} />}>
         <View style={styles.hero}>
           <View style={styles.heroRow}>
             {onBack ? (
@@ -489,10 +533,10 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
               </View>
             </View>
             <View style={styles.timePickerRow}>
-              <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowExpectedDatePicker(true)}>
+              <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={openExpectedDatePicker}>
                 <Text style={styles.secondaryButtonText}>Pick date</Text>
               </Pressable>
-              <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={() => setShowExpectedTimePicker(true)}>
+              <Pressable style={[styles.secondaryButton, styles.rowInput]} onPress={openExpectedTimePicker}>
                 <Text style={styles.secondaryButtonText}>Pick time</Text>
               </Pressable>
             </View>
@@ -642,20 +686,44 @@ export function ResidentVisitorsScreen({ onBack }: { onBack?: () => void }) {
         </View>
       </ScrollView>
 
-      {showExpectedDatePicker ? (
-        <DateTimePicker
-          mode="date"
-          value={selectedExpectedDate}
-          onChange={handleExpectedDateChange}
-          minimumDate={new Date()}
-        />
-      ) : null}
-      {showExpectedTimePicker ? (
-        <DateTimePicker
-          mode="time"
-          value={selectedExpectedDate}
-          onChange={handleExpectedTimeChange}
-        />
+      {activeIosPickerMode ? (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            setIosPickerMode(null);
+          }}
+        >
+          <View style={styles.iosPickerModalScrim}>
+            <View style={styles.iosPickerSheet}>
+              <View style={styles.iosPickerHeader}>
+                <Text style={styles.iosPickerTitle}>
+                  {activeIosPickerMode === 'date' ? 'Select date' : 'Select time'}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setForm((current) => (
+                      current.expected_time
+                        ? current
+                        : { ...current, expected_time: selectedExpectedDate.toISOString() }
+                    ));
+                    setIosPickerMode(null);
+                  }}
+                >
+                  <Text style={styles.iosPickerDoneText}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                mode={activeIosPickerMode}
+                display="spinner"
+                value={selectedExpectedDate}
+                onChange={activeIosPickerMode === 'date' ? handleExpectedDateChange : handleExpectedTimeChange}
+                minimumDate={activeIosPickerMode === 'date' ? new Date() : undefined}
+              />
+            </View>
+          </View>
+        </Modal>
       ) : null}
 
       <Modal visible={contactsVisible} transparent animationType="slide" onRequestClose={() => setContactsVisible(false)}>
@@ -779,4 +847,9 @@ const styles = StyleSheet.create({
   modalTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },
   modalList: { gap: 10, paddingBottom: 18 },
   contactCard: { borderRadius: 18, backgroundColor: colors.surfaceMuted, padding: 14, gap: 4 },
+  iosPickerModalScrim: { flex: 1, backgroundColor: 'rgba(10, 20, 35, 0.35)', justifyContent: 'flex-end' },
+  iosPickerSheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: colors.surface, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 20 },
+  iosPickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, paddingBottom: 4 },
+  iosPickerTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  iosPickerDoneText: { color: colors.primaryDeep, fontSize: 14, fontWeight: '800' },
 });

@@ -1,4 +1,4 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Badge } from '../components/Badge';
@@ -37,8 +37,7 @@ export function ResidentFacilitiesScreen() {
   const [bookingForm, setBookingForm] = useState(initialBookingForm);
   const [bookingFilter, setBookingFilter] = useState<'Upcoming' | 'Past'>('Upcoming');
   const [showFacilityPicker, setShowFacilityPicker] = useState(false);
-  const [showBookingDatePicker, setShowBookingDatePicker] = useState(false);
-  const [showBookingTimePicker, setShowBookingTimePicker] = useState(false);
+  const [iosBookingPickerMode, setIosBookingPickerMode] = useState<'date' | 'time' | null>(null);
 
   const loadBase = useCallback(async () => {
     setRefreshing(true);
@@ -144,7 +143,6 @@ export function ResidentFacilitiesScreen() {
   }, [bookingForm.start_time]);
 
   const handleBookingDateChange = (_event: DateTimePickerEvent, date?: Date) => {
-    setShowBookingDatePicker(Platform.OS === 'ios');
     if (!date) return;
 
     const year = date.getFullYear();
@@ -154,12 +152,45 @@ export function ResidentFacilitiesScreen() {
   };
 
   const handleBookingTimeChange = (_event: DateTimePickerEvent, date?: Date) => {
-    setShowBookingTimePicker(Platform.OS === 'ios');
     if (!date) return;
 
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     setBookingForm((current) => ({ ...current, start_time: `${hours}:${minutes}` }));
+  };
+
+  const openBookingDatePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        mode: 'date',
+        value: selectedBookingDateTime,
+        minimumDate: new Date(),
+        onChange: (event, value) => {
+          if (event.type !== 'set' || !value) return;
+          handleBookingDateChange(event, value);
+        },
+      });
+      return;
+    }
+
+    setIosBookingPickerMode('date');
+  };
+
+  const openBookingTimePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        mode: 'time',
+        value: selectedBookingDateTime,
+        is24Hour: false,
+        onChange: (event, value) => {
+          if (event.type !== 'set' || !value) return;
+          handleBookingTimeChange(event, value);
+        },
+      });
+      return;
+    }
+
+    setIosBookingPickerMode('time');
   };
 
   const submitBooking = async () => {
@@ -232,11 +263,11 @@ export function ResidentFacilitiesScreen() {
               <View style={styles.pickerPanel}>
                 <Text style={styles.helperText}>{bookingSelectionLabel}</Text>
                 <View style={styles.formRow}>
-                  <Pressable style={[styles.pickerField, styles.rowInput]} onPress={() => setShowBookingDatePicker(true)}>
+                  <Pressable style={[styles.pickerField, styles.rowInput]} onPress={openBookingDatePicker}>
                     <Text style={styles.pickerFieldLabel}>Date</Text>
                     <Text style={styles.pickerFieldValue}>{selectedBookingDateLabel}</Text>
                   </Pressable>
-                  <Pressable style={[styles.pickerField, styles.rowInput]} onPress={() => setShowBookingTimePicker(true)}>
+                  <Pressable style={[styles.pickerField, styles.rowInput]} onPress={openBookingTimePicker}>
                     <Text style={styles.pickerFieldLabel}>Time</Text>
                     <Text style={styles.pickerFieldValue}>{selectedBookingTimeLabel}</Text>
                   </Pressable>
@@ -321,20 +352,48 @@ export function ResidentFacilitiesScreen() {
           )}
         </View>
       </ScrollView>
-      {showBookingDatePicker ? (
-        <DateTimePicker
-          mode="date"
-          value={selectedBookingDateTime}
-          onChange={handleBookingDateChange}
-          minimumDate={new Date()}
-        />
-      ) : null}
-      {showBookingTimePicker ? (
-        <DateTimePicker
-          mode="time"
-          value={selectedBookingDateTime}
-          onChange={handleBookingTimeChange}
-        />
+      {Platform.OS === 'ios' && iosBookingPickerMode ? (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => setIosBookingPickerMode(null)}
+        >
+          <View style={styles.iosPickerModalScrim}>
+            <View style={styles.iosPickerSheet}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.modalTitle}>{iosBookingPickerMode === 'date' ? 'Select date' : 'Select time'}</Text>
+                <Pressable
+                  onPress={() => {
+                    const pickerDate = selectedBookingDateTime;
+                    if (iosBookingPickerMode === 'date' && !bookingForm.booking_date) {
+                      const year = pickerDate.getFullYear();
+                      const month = String(pickerDate.getMonth() + 1).padStart(2, '0');
+                      const day = String(pickerDate.getDate()).padStart(2, '0');
+                      setBookingForm((current) => ({ ...current, booking_date: `${year}-${month}-${day}` }));
+                    }
+                    if (iosBookingPickerMode === 'time' && !bookingForm.start_time) {
+                      const hours = String(pickerDate.getHours()).padStart(2, '0');
+                      const minutes = String(pickerDate.getMinutes()).padStart(2, '0');
+                      setBookingForm((current) => ({ ...current, start_time: `${hours}:${minutes}` }));
+                    }
+                    setIosBookingPickerMode(null);
+                  }}
+                  style={styles.dismissButton}
+                >
+                  <Text style={styles.dismissButtonText}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                mode={iosBookingPickerMode}
+                display="spinner"
+                value={selectedBookingDateTime}
+                onChange={iosBookingPickerMode === 'date' ? handleBookingDateChange : handleBookingTimeChange}
+                minimumDate={iosBookingPickerMode === 'date' ? new Date() : undefined}
+              />
+            </View>
+          </View>
+        </Modal>
       ) : null}
       <Modal visible={showFacilityPicker} transparent animationType="fade" onRequestClose={() => setShowFacilityPicker(false)}>
         <View style={styles.modalScrim}>
@@ -434,4 +493,6 @@ const styles = StyleSheet.create({
   bookingFilterChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
   bookingFilterChipTextActive: { color: colors.primaryDeep },
   microMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 16 },
+  iosPickerModalScrim: { flex: 1, backgroundColor: 'rgba(10, 20, 35, 0.35)', justifyContent: 'flex-end' },
+  iosPickerSheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: colors.surface, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 20 },
 });

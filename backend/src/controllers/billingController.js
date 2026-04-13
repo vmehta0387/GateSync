@@ -30,6 +30,17 @@ const normalizeOptionalString = (value) => {
     return normalized || null;
 };
 
+const normalizePaymentMethod = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized === 'cash') return 'Cash';
+    if (normalized === 'upi') return 'UPI';
+    if (normalized === 'banktransfer' || normalized === 'bank transfer' || normalized === 'neft' || normalized === 'rtgs' || normalized === 'imps') return 'BankTransfer';
+    if (normalized === 'cheque' || normalized === 'check') return 'Cheque';
+    if (normalized === 'online' || normalized === 'adminoverride') return 'Online';
+    return null;
+};
+
 const normalizeJson = (value, fallback = []) => {
     if (!value) return fallback;
     if (typeof value === 'string') {
@@ -79,20 +90,20 @@ const normalizeFlatTypeAmounts = (value) => {
     }, {});
 };
 
-const calculateLateFee = ({ subtotalAmount, lateFeeType, lateFeeValue, dueDate, totalAmountBeforeLateFee }) => {
-    if (!dueDate || lateFeeType === 'None' || toNumber(lateFeeValue) <= 0) {
+const calculateLateFee = ({ subtotalAmount, lateFeeType, lateFeeValue, dueDate, totalAmountBeforeLateFee, asOfDate = null }) => {
+    if (!dueDate || lateFeeType === 'None' || toNumber(lateFeeValue) <= 0 || toNumber(totalAmountBeforeLateFee || subtotalAmount) <= 0) {
         return { overdueDays: 0, penaltyAmount: 0 };
     }
 
     const due = new Date(`${formatDate(dueDate)}T00:00:00`);
-    const today = new Date();
-    const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const reference = asOfDate ? new Date(asOfDate) : new Date();
+    const referenceStart = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate()));
 
-    if (Number.isNaN(due.getTime()) || todayStart <= due) {
+    if (Number.isNaN(due.getTime()) || Number.isNaN(reference.getTime()) || referenceStart <= due) {
         return { overdueDays: 0, penaltyAmount: 0 };
     }
 
-    const overdueDays = Math.floor((todayStart.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+    const overdueDays = Math.floor((referenceStart.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
     const lateValue = toNumber(lateFeeValue);
 
     if (lateFeeType === 'FlatPerDay') {
@@ -116,12 +127,15 @@ const computeInvoiceSnapshot = (invoice) => {
     const paidAmount = toNumber(invoice.payment_total ?? invoice.paid_amount);
     const adjustmentAmount = toNumber(invoice.adjustment_total ?? invoice.adjustment_amount);
     const totalBeforeLateFee = Math.max(0, subtotalAmount - adjustmentAmount);
+    const latestPaymentAt = invoice.latest_payment_at || invoice.paid_at || null;
+    const isSettledBeforeLateFee = totalBeforeLateFee > 0 && paidAmount >= totalBeforeLateFee;
     const { overdueDays, penaltyAmount } = calculateLateFee({
         subtotalAmount,
         lateFeeType: invoice.late_fee_type || 'None',
         lateFeeValue: invoice.late_fee_value,
         dueDate: invoice.due_date,
         totalAmountBeforeLateFee: totalBeforeLateFee,
+        asOfDate: isSettledBeforeLateFee ? latestPaymentAt : null,
     });
 
     const totalAmount = Math.max(0, Number((subtotalAmount + penaltyAmount - adjustmentAmount).toFixed(2)));
@@ -168,7 +182,7 @@ const syncInvoiceFinancials = async (invoiceRows) => {
                 `UPDATE invoices
                  SET invoice_number = ?, status = ?, penalty_amount = ?, adjustment_amount = ?, paid_amount = ?,
                      total_amount = ?, balance_amount = ?, amount = ?,
-                     paid_at = CASE WHEN ? = 'Paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END
+                     paid_at = CASE WHEN ? = 'Paid' THEN COALESCE(paid_at, ?, NOW()) ELSE paid_at END
                  WHERE id = ?`,
                 [
                     nextInvoiceNumber,
@@ -180,6 +194,7 @@ const syncInvoiceFinancials = async (invoiceRows) => {
                     snapshot.balanceAmount,
                     snapshot.totalAmount,
                     snapshot.status,
+                    row.latest_payment_at || null,
                     row.id,
                 ]
             );
@@ -238,13 +253,17 @@ const fetchInvoiceRows = async ({ societyId, role, userId, filters = {}, invoice
             f.billing_custom_amount,
             bc.title AS config_title,
             COALESCE(payments.payment_total, 0) AS payment_total,
+            payments.latest_payment_at,
             COALESCE(adjustments.adjustment_total, 0) AS adjustment_total
          FROM invoices i
          INNER JOIN flats f ON f.id = i.flat_id
          ${residentJoin}
          LEFT JOIN billing_configs bc ON bc.id = i.billing_config_id
          LEFT JOIN (
-            SELECT invoice_id, SUM(CASE WHEN status = 'Completed' THEN amount ELSE 0 END) AS payment_total
+            SELECT
+                invoice_id,
+                SUM(CASE WHEN status = 'Completed' THEN amount ELSE 0 END) AS payment_total,
+                MAX(CASE WHEN status = 'Completed' THEN paid_at ELSE NULL END) AS latest_payment_at
             FROM invoice_payments GROUP BY invoice_id
          ) payments ON payments.invoice_id = i.id
          LEFT JOIN (
@@ -948,16 +967,39 @@ exports.payInvoice = async (req, res) => {
             return res.status(400).json({ success: false, message: 'This invoice is already settled' });
         }
 
-        const paymentReference = normalizeOptionalString(req.body.payment_reference) || `PAY-${Date.now()}`;
+        const paymentMethod = normalizePaymentMethod(req.body.payment_method || req.body.payment_mode) || (req.user.role === 'RESIDENT' ? 'Online' : 'Cash');
+        const transactionId = normalizeOptionalString(req.body.transaction_id || req.body.payment_reference);
+        const chequeNumber = normalizeOptionalString(req.body.cheque_number);
+        if ((paymentMethod === 'UPI' || paymentMethod === 'BankTransfer') && !transactionId) {
+            return res.status(400).json({ success: false, message: 'Transaction ID is required for UPI and bank transfer payments' });
+        }
+        if (paymentMethod === 'Cheque' && !chequeNumber) {
+            return res.status(400).json({ success: false, message: 'Cheque number is required for cheque payments' });
+        }
+
+        const paymentReference = paymentMethod === 'Cheque'
+            ? chequeNumber
+            : (transactionId || `PAY-${Date.now()}`);
+        const paymentGateway = normalizeOptionalString(req.body.payment_gateway) || (
+            paymentMethod === 'Cash'
+                ? 'CashDesk'
+                : paymentMethod === 'Cheque'
+                    ? 'Cheque'
+                    : paymentMethod === 'BankTransfer'
+                        ? 'BankTransfer'
+                        : paymentMethod === 'UPI'
+                            ? 'UPI'
+                            : 'Online'
+        );
         const paymentAmount = req.body.amount ? Math.min(toNumber(req.body.amount), toNumber(invoice.balance_amount)) : toNumber(invoice.balance_amount);
         if (paymentAmount <= 0) return res.status(400).json({ success: false, message: 'A valid payment amount is required' });
 
         await db.query(
             `INSERT INTO invoice_payments (invoice_id, amount, payment_method, payment_gateway, payment_reference, paid_by_user_id, status, paid_at, notes)
              VALUES (?, ?, ?, ?, ?, ?, 'Completed', NOW(), ?)`,
-            [invoiceId, paymentAmount, normalizeOptionalString(req.body.payment_method) || 'Online', normalizeOptionalString(req.body.payment_gateway) || 'MockGateway', paymentReference, req.user.id, normalizeOptionalString(req.body.notes)]
+            [invoiceId, paymentAmount, paymentMethod, paymentGateway, paymentReference, req.user.id, normalizeOptionalString(req.body.notes)]
         );
-        await db.query(`UPDATE invoices SET payment_method = ?, payment_reference = ? WHERE id = ?`, [normalizeOptionalString(req.body.payment_method) || 'Online', paymentReference, invoiceId]);
+        await db.query(`UPDATE invoices SET payment_method = ?, payment_reference = ? WHERE id = ?`, [paymentMethod, paymentReference, invoiceId]);
         await fetchInvoiceRows({ societyId: req.user.society_id, role: 'ADMIN', userId: req.user.id, invoiceId });
         try {
             await refreshInvoicePdf({ invoiceId, societyId: req.user.society_id });
@@ -965,7 +1007,7 @@ exports.payInvoice = async (req, res) => {
             console.error(`Failed to refresh PDF after payment for invoice ${invoiceId}:`, pdfError.message);
         }
 
-        return res.status(200).json({ success: true, message: 'Payment recorded successfully' });
+        return res.status(200).json({ success: true, message: 'Payment recorded successfully', payment_method: paymentMethod, payment_reference: paymentReference });
     } catch (error) {
         console.error('payInvoice error:', error);
         return res.status(500).json({ success: false, message: 'Server error processing payment' });

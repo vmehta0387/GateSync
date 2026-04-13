@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, AppState, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '../components/EmptyState';
 import { GuardTabBar, type GuardTab } from '../components/GuardTabBar';
@@ -40,10 +40,10 @@ export function GuardShell() {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [flatOptions, setFlatOptions] = useState<FlatOption[]>([]);
 
-  const loadAll = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
+  const loadAll = useCallback(async (mode: 'initial' | 'refresh' | 'silent' = 'silent') => {
     if (mode === 'initial') {
       setLoading(true);
-    } else {
+    } else if (mode === 'refresh') {
       setRefreshing(true);
     }
 
@@ -82,7 +82,7 @@ export function GuardShell() {
     }
 
     return subscribeToGuardLiveUpdates(session.user.society_id, () => {
-      void loadAll();
+      void loadAll('silent');
     });
   }, [loadAll, session?.user.society_id]);
 
@@ -91,11 +91,13 @@ export function GuardShell() {
       return undefined;
     }
 
-    const interval = setInterval(() => {
-      void loadAll();
-    }, 3000);
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void loadAll('silent');
+      }
+    });
 
-    return () => clearInterval(interval);
+    return () => subscription.remove();
   }, [loadAll, session?.user.society_id]);
 
   const activeShift = useMemo(() => shifts.find((shift) => shift.status === 'OnDuty') || null, [shifts]);
@@ -138,7 +140,7 @@ export function GuardShell() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll()} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll('refresh')} />}
       >
         <View style={styles.header}>
           <GuardTabBar activeTab={activeTab} onChange={setActiveTab} />

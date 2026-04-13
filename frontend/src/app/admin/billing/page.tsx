@@ -83,6 +83,13 @@ type BillingTab = 'overview' | 'rules' | 'invoices' | 'reports';
 type InvoiceFilter = 'All' | 'Unpaid' | 'Overdue' | 'Paid' | 'PartiallyPaid';
 type InvoiceAction = 'paid' | 'waive' | 'delete';
 type BulkAction = 'delete';
+type PaymentMethod = 'Cash' | 'UPI' | 'BankTransfer' | 'Cheque';
+type MarkPaidForm = {
+  payment_method: PaymentMethod;
+  transaction_id: string;
+  cheque_number: string;
+  notes: string;
+};
 
 const API_BASE = 'https://api.gatesync.in/api/v1';
 
@@ -107,6 +114,13 @@ const defaultRule: RuleForm = {
     { label: 'Security', amount: '500', calculation: 'fixed' as const },
     { label: 'Water', amount: '500', calculation: 'fixed' as const },
   ],
+};
+
+const defaultMarkPaidForm: MarkPaidForm = {
+  payment_method: 'Cash',
+  transaction_id: '',
+  cheque_number: '',
+  notes: '',
 };
 
 const tabs: Array<{ id: BillingTab; label: string; helper: string }> = [
@@ -204,6 +218,7 @@ export default function BillingPage() {
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: InvoiceAction; invoice: Invoice } | null>(null);
+  const [markPaidForm, setMarkPaidForm] = useState<MarkPaidForm>(defaultMarkPaidForm);
   const [bulkConfirmAction, setBulkConfirmAction] = useState<{ type: BulkAction; invoiceIds: number[] } | null>(null);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
   const [flatTypes, setFlatTypes] = useState<string[]>(['Studio', '1BHK', '2BHK', '3BHK', '4BHK', 'Villa', 'Other']);
@@ -304,13 +319,34 @@ export default function BillingPage() {
     }
   };
 
-  const markPaid = async (invoiceId: number) => {
-    await fetch(`${API_BASE}/billing/${invoiceId}/pay`, {
+  const openMarkPaidConfirm = (invoice: Invoice) => {
+    setMarkPaidForm(defaultMarkPaidForm);
+    setConfirmAction({ type: 'paid', invoice });
+  };
+
+  const markPaid = async (invoiceId: number, payment: MarkPaidForm) => {
+    const payload: Record<string, string> = {
+      payment_method: payment.payment_method,
+      notes: payment.notes.trim(),
+    };
+    if (payment.payment_method === 'UPI' || payment.payment_method === 'BankTransfer') {
+      payload.transaction_id = payment.transaction_id.trim();
+    }
+    if (payment.payment_method === 'Cheque') {
+      payload.cheque_number = payment.cheque_number.trim();
+    }
+
+    const res = await fetch(`${API_BASE}/billing/${invoiceId}/pay`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ payment_method: 'AdminOverride' }),
+      body: JSON.stringify(payload),
     });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to mark invoice as paid');
+    }
     await loadAll();
+    return data;
   };
 
   const applyWaiver = async (invoiceId: number) => {
@@ -353,7 +389,13 @@ export default function BillingPage() {
     if (!confirmAction) return;
     try {
       if (confirmAction.type === 'paid') {
-        await markPaid(confirmAction.invoice.id);
+        if ((markPaidForm.payment_method === 'UPI' || markPaidForm.payment_method === 'BankTransfer') && !markPaidForm.transaction_id.trim()) {
+          throw new Error('Transaction ID is required for UPI and bank transfer payments');
+        }
+        if (markPaidForm.payment_method === 'Cheque' && !markPaidForm.cheque_number.trim()) {
+          throw new Error('Cheque number is required for cheque payments');
+        }
+        await markPaid(confirmAction.invoice.id, markPaidForm);
         setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} marked as paid.`);
       } else if (confirmAction.type === 'waive') {
         await applyWaiver(confirmAction.invoice.id);
@@ -363,6 +405,7 @@ export default function BillingPage() {
         setMessage(`${confirmAction.invoice.invoice_number || `INV-${confirmAction.invoice.id}`} deleted successfully.`);
       }
       setConfirmAction(null);
+      setMarkPaidForm(defaultMarkPaidForm);
       setSelectedInvoice(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to complete invoice action');
@@ -896,7 +939,7 @@ export default function BillingPage() {
                         {['Unpaid', 'Overdue', 'PartiallyPaid'].includes(invoice.status) ? (
                           <div className="flex justify-end gap-2">
                             <button onClick={() => setSelectedInvoice(invoice)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View</button>
-                            <button onClick={() => setConfirmAction({ type: 'paid', invoice })} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Mark Paid</button>
+                            <button onClick={() => openMarkPaidConfirm(invoice)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Mark Paid</button>
                             <button onClick={() => setConfirmAction({ type: 'waive', invoice })} className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-200">Waive</button>
                             {invoice.status === 'Unpaid' ? (
                               <button onClick={() => setConfirmAction({ type: 'delete', invoice })} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Delete</button>
@@ -1064,7 +1107,7 @@ export default function BillingPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {['Unpaid', 'Overdue', 'PartiallyPaid'].includes(selectedInvoice.status) ? (
                 <>
-                  <button onClick={() => setConfirmAction({ type: 'paid', invoice: selectedInvoice })} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+                  <button onClick={() => openMarkPaidConfirm(selectedInvoice)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">
                     Mark Paid
                   </button>
                   <button onClick={() => setConfirmAction({ type: 'waive', invoice: selectedInvoice })} className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-700 hover:bg-amber-200">
@@ -1119,8 +1162,62 @@ export default function BillingPage() {
                 ? `will be removed along with its line items, payments, and adjustments.`
                 : `currently has a balance of ${formatCurrency(confirmAction.invoice.balance_amount)}.`}
             </p>
+            {confirmAction.type === 'paid' ? (
+              <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div>
+                  <FieldLabel label="Payment Method" />
+                  <select
+                    value={markPaidForm.payment_method}
+                    onChange={(e) => setMarkPaidForm((current) => ({ ...current, payment_method: e.target.value as PaymentMethod }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="BankTransfer">Bank Transfer</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+                {(markPaidForm.payment_method === 'UPI' || markPaidForm.payment_method === 'BankTransfer') ? (
+                  <div>
+                    <FieldLabel label="Transaction ID" />
+                    <input
+                      value={markPaidForm.transaction_id}
+                      onChange={(e) => setMarkPaidForm((current) => ({ ...current, transaction_id: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                      placeholder="Enter UPI/Bank transaction ID"
+                    />
+                  </div>
+                ) : null}
+                {markPaidForm.payment_method === 'Cheque' ? (
+                  <div>
+                    <FieldLabel label="Cheque Number" />
+                    <input
+                      value={markPaidForm.cheque_number}
+                      onChange={(e) => setMarkPaidForm((current) => ({ ...current, cheque_number: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                      placeholder="Enter cheque number"
+                    />
+                  </div>
+                ) : null}
+                <div>
+                  <FieldLabel label="Notes (Optional)" />
+                  <input
+                    value={markPaidForm.notes}
+                    onChange={(e) => setMarkPaidForm((current) => ({ ...current, notes: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                    placeholder="Collector name / remarks"
+                  />
+                </div>
+              </div>
+            ) : null}
             <div className="mt-6 flex gap-3">
-              <button onClick={() => setConfirmAction(null)} className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <button
+                onClick={() => {
+                  setConfirmAction(null);
+                  setMarkPaidForm(defaultMarkPaidForm);
+                }}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
                 Cancel
               </button>
               <button onClick={() => void handleInvoiceAction()} className={`flex-1 rounded-2xl px-4 py-3 text-sm font-bold text-white ${confirmAction.type === 'paid' ? 'bg-emerald-600 hover:bg-emerald-700' : confirmAction.type === 'waive' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-600 hover:bg-rose-700'}`}>

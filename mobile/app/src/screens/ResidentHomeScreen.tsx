@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Badge } from '../components/Badge';
 import { EmptyState } from '../components/EmptyState';
 import { subscribeToResidentVisitorUpdates } from '../lib/socket';
@@ -46,8 +46,10 @@ export function ResidentHomeScreen({
   const [committees, setCommittees] = useState<CommitteeDirectoryItem[]>([]);
   const [complaints, setComplaints] = useState<ComplaintSummaryItem[]>([]);
 
-  const loadAll = useCallback(async () => {
-    setRefreshing(true);
+  const loadAll = useCallback(async (mode: 'refresh' | 'silent' = 'silent') => {
+    if (mode === 'refresh') {
+      setRefreshing(true);
+    }
     const [flatsRes, logsRes, pendingRes, invoicesRes, committeesRes, complaintsRes] = await Promise.all([
       fetchResidentFlats(),
       fetchVisitorLogs(),
@@ -67,7 +69,7 @@ export function ResidentHomeScreen({
   }, []);
 
   useEffect(() => {
-    void loadAll();
+    void loadAll('silent');
   }, [loadAll]);
 
   useEffect(() => {
@@ -77,7 +79,7 @@ export function ResidentHomeScreen({
 
     const rooms = [`resident_${session.user.id}`, ...flats.map((flat) => `flat_${flat.flat_id}`)];
     return subscribeToResidentVisitorUpdates(rooms, () => {
-      void loadAll();
+      void loadAll('silent');
     });
   }, [flats, loadAll, session?.user?.id]);
 
@@ -86,11 +88,13 @@ export function ResidentHomeScreen({
       return undefined;
     }
 
-    const interval = setInterval(() => {
-      void loadAll();
-    }, 3000);
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void loadAll('silent');
+      }
+    });
 
-    return () => clearInterval(interval);
+    return () => subscription.remove();
   }, [loadAll, session?.user?.id]);
 
   const upcomingVisitors = useMemo(
@@ -145,7 +149,7 @@ export function ResidentHomeScreen({
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll()} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll('refresh')} />}
       >
         <View style={styles.heroCard}>
           <Text style={styles.eyebrow}>GateSync Resident</Text>
