@@ -23,6 +23,7 @@ const TEST_BYPASS_NUMBERS = new Set([
     '7276838040',
     '9988776655',
     '7276500876',
+    '9999999999',
 ]);
 const TEST_BYPASS_OTP = '030407';
 
