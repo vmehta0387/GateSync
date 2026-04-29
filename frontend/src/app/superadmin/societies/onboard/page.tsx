@@ -196,7 +196,7 @@ export default function SocietyOnboardingPage() {
             </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-sm font-semibold text-slate-900">Declared Units</p>
+                <p className="text-sm font-semibold text-slate-900">Declared Flats / Units</p>
                 <input
                   type="number"
                   min={1}
@@ -258,7 +258,7 @@ export default function SocietyOnboardingPage() {
               </select>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Declared Flats (Locked)</label>
+              <label className="text-sm font-semibold text-slate-700">Declared Flats / Units (Locked)</label>
               <input value={formData.total_flats} disabled className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5" />
             </div>
           </div>
