@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { assertCanAddFlats } = require('../services/flatQuotaService');
 
 const RESIDENT_ACCESS_ROLES = ['Primary', 'Secondary'];
 
@@ -313,6 +314,7 @@ exports.addResident = async (req, res) => {
                     );
                 }
             } else {
+                await assertCanAddFlats({ societyId: req.user.society_id, requestedNewUnits: 1 });
                 const [flatResult] = await db.query(
                     'INSERT INTO flats (society_id, block_name, flat_number, flat_type) VALUES (?, ?, ?, ?)',
                     [req.user.society_id, block_name, flat_number, flat_type]
@@ -367,6 +369,14 @@ exports.addResident = async (req, res) => {
         return res.status(201).json({ success: true, message: 'Resident and all complex mappings added successfully' });
     } catch (error) {
         console.error('addResident error:', error);
+        if (error.code === 'FLAT_QUOTA_EXCEEDED') {
+            return res.status(error.statusCode || 403).json({
+                success: false,
+                code: error.code,
+                message: 'Your subscription supports limited units. Please upgrade units to add more flats.',
+                details: error.details,
+            });
+        }
         return res.status(500).json({ success: false, message: 'Server error adding resident with complex payload' });
     }
 };
@@ -462,6 +472,7 @@ exports.updateResident = async (req, res) => {
                         [flat.flat_type || null, flatIdResolved, req.user.society_id]
                     );
                 } else {
+                    await assertCanAddFlats({ societyId: req.user.society_id, requestedNewUnits: 1 });
                     const [flatResult] = await db.query(
                         'INSERT INTO flats (society_id, block_name, flat_number, flat_type) VALUES (?, ?, ?, ?)',
                         [req.user.society_id, flat.block_name, flat.flat_number, flat.flat_type || null]
@@ -522,6 +533,14 @@ exports.updateResident = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid payload' });
     } catch (error) {
         console.error('updateResident error:', error);
+        if (error.code === 'FLAT_QUOTA_EXCEEDED') {
+            return res.status(error.statusCode || 403).json({
+                success: false,
+                code: error.code,
+                message: 'Your subscription supports limited units. Please upgrade units to add more flats.',
+                details: error.details,
+            });
+        }
         return res.status(500).json({ success: false, message: 'Server error updating resident' });
     }
 };

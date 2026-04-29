@@ -6,6 +6,7 @@ const path = require('path');
 const { initWebSocket } = require('./websocket/socket');
 const { corsOptions } = require('./config/cors');
 const { uploadsRoot, ensureUploadsRoot } = require('./config/uploads');
+const { enforceSubscriptionGuard } = require('./middlewares/subscriptionGuard');
 
 dotenv.config();
 require('./config/db');
@@ -19,6 +20,7 @@ initWebSocket(server);
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(enforceSubscriptionGuard);
 ensureUploadsRoot();
 app.use('/uploads', express.static(uploadsRoot));
 
@@ -38,6 +40,7 @@ const facilityRoutes = require('./routes/facilityRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const securityRoutes = require('./routes/securityRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
 
 app.use('/api/v1/superadmin', superadminRoutes);
 app.use('/api/v1/auth', authRoutes);
@@ -54,6 +57,7 @@ app.use('/api/v1/facilities', facilityRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/security', securityRoutes);
+app.use('/api/v1/subscriptions', subscriptionRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'GatePulse API is running' });

@@ -1,4 +1,6 @@
 const db = require('../config/db');
+const { ensureSocietySubscription } = require('../services/subscriptionService');
+const { getFlatQuotaSnapshot } = require('../services/flatQuotaService');
 
 exports.getPlatformStats = async (req, res) => {
     try {
@@ -46,6 +48,10 @@ exports.onboardSociety = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Society name and admin phone are required' });
         }
 
+        if (!Number(total_flats) || Number(total_flats) <= 0) {
+            return res.status(400).json({ success: false, message: 'Declared units/flats must be greater than 0' });
+        }
+
         connection = await db.getConnection();
         await connection.beginTransaction();
 
@@ -79,6 +85,9 @@ exports.onboardSociety = async (req, res) => {
                 [gateValues]
             );
         }
+
+        // 4. Initialize free trial subscription for this society
+        await ensureSocietySubscription(societyId, connection);
 
         await connection.commit();
         
@@ -151,11 +160,12 @@ exports.generateFlats = async (req, res) => {
     let connection;
     try {
         const { id } = req.params;
-        const [societies] = await db.query('SELECT towers_count, floors_per_tower FROM societies WHERE id = ?', [id]);
+        const [societies] = await db.query('SELECT towers_count, floors_per_tower, total_flats FROM societies WHERE id = ?', [id]);
         if (societies.length === 0) return res.status(404).json({ success: false, message: 'Society not found' });
 
         const towersCount = societies[0].towers_count || 1;
         const floorsCount = societies[0].floors_per_tower || 1;
+        const declaredUnits = Number(societies[0].total_flats || 0);
 
         connection = await db.getConnection();
         await connection.beginTransaction();
@@ -175,6 +185,18 @@ exports.generateFlats = async (req, res) => {
                     flatValues.push([id, blockName, flatNumber]);
                 }
             }
+        }
+
+        if (declaredUnits > 0 && flatValues.length > declaredUnits) {
+            return res.status(403).json({
+                success: false,
+                code: 'FLAT_QUOTA_EXCEEDED',
+                message: `Declared subscription units are ${declaredUnits}, but auto-generation is trying to create ${flatValues.length} flats. Update subscription units or reduce structure before generating.`,
+                details: {
+                    allowed_units: declaredUnits,
+                    attempted_units: flatValues.length,
+                },
+            });
         }
 
         if (flatValues.length > 0) {
@@ -212,6 +234,31 @@ exports.updateSociety = async (req, res) => {
 
         connection = await db.getConnection();
         await connection.beginTransaction();
+
+        const [[societyRow]] = await connection.query(
+            'SELECT total_flats FROM societies WHERE id = ? LIMIT 1',
+            [id]
+        );
+        if (!societyRow) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: 'Society not found' });
+        }
+
+        if (Number(total_flats || 0) > 0) {
+            const quota = await getFlatQuotaSnapshot({ societyId: Number(id), connection });
+            if (Number(total_flats) < Number(quota.current_units)) {
+                await connection.rollback();
+                return res.status(403).json({
+                    success: false,
+                    code: 'FLAT_QUOTA_BELOW_CURRENT_USAGE',
+                    message: `Cannot reduce subscription units below current mapped units (${quota.current_units}).`,
+                    details: {
+                        current_units: quota.current_units,
+                        requested_units: Number(total_flats),
+                    },
+                });
+            }
+        }
 
         // 1. Update Society
         await connection.query(
@@ -256,4 +303,3 @@ exports.updateSociety = async (req, res) => {
         if (connection) connection.release();
     }
 };
-

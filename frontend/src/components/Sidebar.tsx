@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Bell, AlertTriangle, FileText, LogOut, MessageSquare, Briefcase, Calendar, Settings, ShieldCheck, UserCheck, ChevronLeft, ChevronRight, Landmark } from 'lucide-react';
+import { Home, Users, Bell, AlertTriangle, FileText, LogOut, MessageSquare, Briefcase, Calendar, Settings, ShieldCheck, UserCheck, ChevronLeft, ChevronRight, Landmark, Sparkles } from 'lucide-react';
 
 interface SidebarProps {
   role: string;
@@ -17,6 +17,7 @@ export default function Sidebar({ role, societyName = '', isCollapsed, onToggle 
 
   const adminLinks = [
     { name: 'Dashboard', href: '/admin', icon: Home },
+    { name: 'Onboarding', href: '/admin/onboarding', icon: Sparkles },
     { name: 'Visitors', href: '/admin/visitors', icon: UserCheck },
     { name: 'Committees', href: '/admin/committees', icon: Landmark },
     { name: 'Communication', href: '/admin/communication', icon: MessageSquare },

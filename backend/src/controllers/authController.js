@@ -3,6 +3,7 @@ const db = require('../config/db');
 const { isExpoPushToken } = require('../services/pushNotificationService');
 const { sendSms } = require('../services/smsService');
 const { checkVerification, startVerification } = require('../services/twilioService');
+const { getSocietySubscriptionSnapshot } = require('../services/subscriptionService');
 
 async function fetchUserWithSociety(userId) {
     const [users] = await db.query(`
@@ -125,6 +126,7 @@ exports.verifyOtp = async (req, res) => {
         }
 
         user = await fetchUserWithSociety(user.id);
+        const subscription = user.society_id ? await getSocietySubscriptionSnapshot(user.society_id) : null;
 
         if (user.status && user.status !== 'ACTIVE') {
             return res.status(403).json({ success: false, message: 'This account is inactive. Please contact your society admin.' });
@@ -147,7 +149,8 @@ exports.verifyOtp = async (req, res) => {
                 role: user.role,
                 society_id: user.society_id,
                 society_name: user.society_name || ''
-            }
+            },
+            subscription,
         });
     } catch (error) {
         console.error('verifyOtp error:', error);
@@ -158,6 +161,7 @@ exports.verifyOtp = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const user = await fetchUserWithSociety(req.user.id);
+        const subscription = user && user.society_id ? await getSocietySubscriptionSnapshot(user.society_id) : null;
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
@@ -172,7 +176,8 @@ exports.getMe = async (req, res) => {
                 role: user.role,
                 society_id: user.society_id,
                 society_name: user.society_name || ''
-            }
+            },
+            subscription,
         });
     } catch (error) {
         console.error('getMe error:', error);

@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { getStoredSession, useClientReady } from '@/lib/auth';
 
-const managerBlockedPrefixes = ['/admin/settings', '/admin/billing', '/admin/committees'];
+const managerBlockedPrefixes = ['/admin/settings', '/admin/billing', '/admin/committees', '/admin/onboarding'];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
