@@ -15,6 +15,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isAuthorized = !!session.token && (currentRole === 'ADMIN' || currentRole === 'MANAGER');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [societyName, setSocietyName] = useState(session.user?.society_name || '');
+  const [showOnboardingLink, setShowOnboardingLink] = useState(true);
   useEffect(() => {
     if (isClient && !isAuthorized) {
       router.replace('/');
@@ -51,13 +52,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     void syncProfile();
   }, [isClient, session.token, session.user?.society_id, session.user?.society_name]);
 
+  useEffect(() => {
+    if (!isClient || !session.token || currentRole !== 'ADMIN') return;
+
+    const syncOnboardingVisibility = async () => {
+      try {
+        const response = await fetch('https://api.gatesync.in/api/v1/settings', {
+          headers: { Authorization: `Bearer ${session.token}` },
+          cache: 'no-store',
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) return;
+
+        const onboarding = data?.settings?.admin_onboarding || {};
+        const completed = Boolean(onboarding.completed);
+        setShowOnboardingLink(!completed);
+
+        if (completed && pathname.startsWith('/admin/onboarding')) {
+          router.replace('/admin');
+        }
+      } catch (error) {
+        console.error('Could not fetch onboarding settings', error);
+      }
+    };
+
+    void syncOnboardingVisibility();
+  }, [currentRole, isClient, pathname, router, session.token]);
+
   if (!isClient || !isAuthorized) {
     return null;
   }
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
-      <Sidebar role={currentRole || 'ADMIN'} societyName={societyName || session.user?.society_name || ''} isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
+      <Sidebar
+        role={currentRole || 'ADMIN'}
+        societyName={societyName || session.user?.society_name || ''}
+        isCollapsed={isCollapsed}
+        onToggle={() => setIsCollapsed(!isCollapsed)}
+        showOnboardingLink={currentRole === 'ADMIN' ? showOnboardingLink : true}
+      />
       <main className={`flex-1 ${isCollapsed ? 'ml-20' : 'ml-64'} p-5 md:p-6 overflow-y-auto transition-all duration-300 ease-in-out`}>
         <div className="w-full max-w-none">
           {children}

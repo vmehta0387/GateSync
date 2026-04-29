@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bot,
   Building2,
@@ -16,6 +17,7 @@ import {
   UserCog,
   Wand2,
 } from 'lucide-react';
+import { getStoredSession, useClientReady } from '@/lib/auth';
 
 type SocietyProfile = {
   society_name: string;
@@ -53,6 +55,17 @@ type CopilotMessage = {
 };
 
 type StepId = 'society' | 'structure' | 'team' | 'operations' | 'validation';
+
+type SavedOnboardingSettings = {
+  completed?: boolean;
+  completed_at?: string;
+  readiness_score?: number;
+  active_step_index?: number;
+  profile?: SocietyProfile;
+  team?: TeamSetup;
+  operations?: OperationsSetup;
+  validation?: ValidationSetup;
+};
 
 const DEFAULT_PROFILE: SocietyProfile = {
   society_name: '',
@@ -173,6 +186,9 @@ function generateCopilotReply(
 }
 
 export default function AdminOnboardingCopilotPage() {
+  const router = useRouter();
+  const isClient = useClientReady();
+  const session = isClient ? getStoredSession() : { token: null, user: null };
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [profile, setProfile] = useState<SocietyProfile>(DEFAULT_PROFILE);
   const [team, setTeam] = useState<TeamSetup>(DEFAULT_TEAM);
@@ -186,6 +202,10 @@ export default function AdminOnboardingCopilotPage() {
       text: 'Welcome to Society Onboarding Copilot. I will guide you step by step and flag missing items before go-live.',
     },
   ]);
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [statusNotice, setStatusNotice] = useState('');
 
   const activeStep = STEPS[activeStepIndex];
   const score = useMemo(
@@ -248,6 +268,97 @@ export default function AdminOnboardingCopilotPage() {
     [operations, profile, score, team, validation],
   );
 
+  useEffect(() => {
+    if (!isClient || !session.token || isSettingsLoaded) return;
+
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('https://api.gatesync.in/api/v1/settings', {
+          headers: { Authorization: `Bearer ${session.token}` },
+          cache: 'no-store',
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          setIsSettingsLoaded(true);
+          return;
+        }
+
+        const onboarding = (data?.settings?.admin_onboarding || {}) as SavedOnboardingSettings;
+        if (onboarding.profile) setProfile((current) => ({ ...current, ...onboarding.profile }));
+        if (onboarding.team) setTeam((current) => ({ ...current, ...onboarding.team }));
+        if (onboarding.operations) setOperations((current) => ({ ...current, ...onboarding.operations }));
+        if (onboarding.validation) setValidation((current) => ({ ...current, ...onboarding.validation }));
+        if (typeof onboarding.active_step_index === 'number') {
+          setActiveStepIndex(Math.max(0, Math.min(STEPS.length - 1, onboarding.active_step_index)));
+        }
+        setIsCompleted(Boolean(onboarding.completed));
+        setIsSettingsLoaded(true);
+      } catch (error) {
+        console.error('Failed to load admin onboarding settings', error);
+        setIsSettingsLoaded(true);
+      }
+    };
+
+    void loadSettings();
+  }, [isClient, isSettingsLoaded, session.token]);
+
+  const markOnboardingComplete = async () => {
+    if (!session.token) return;
+
+    setIsCompleting(true);
+    setStatusNotice('');
+    try {
+      const settingsResponse = await fetch('https://api.gatesync.in/api/v1/settings', {
+        headers: { Authorization: `Bearer ${session.token}` },
+        cache: 'no-store',
+      });
+      const settingsData = await settingsResponse.json();
+      if (!settingsResponse.ok || !settingsData?.success) {
+        setStatusNotice('Could not load settings to finalize onboarding.');
+        setIsCompleting(false);
+        return;
+      }
+
+      const mergedSettings = {
+        ...(settingsData.settings || {}),
+        admin_onboarding: {
+          completed: true,
+          completed_at: new Date().toISOString(),
+          readiness_score: score,
+          active_step_index: activeStepIndex,
+          profile,
+          team,
+          operations,
+          validation,
+        },
+      };
+
+      const updateResponse = await fetch('https://api.gatesync.in/api/v1/settings', {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ settings: mergedSettings }),
+      });
+      const updateData = await updateResponse.json();
+      if (!updateResponse.ok || !updateData?.success) {
+        setStatusNotice(updateData?.message || 'Failed to mark onboarding as completed.');
+        setIsCompleting(false);
+        return;
+      }
+
+      setIsCompleted(true);
+      setStatusNotice('Onboarding completed. The onboarding tab will now be hidden.');
+      setTimeout(() => router.replace('/admin'), 900);
+    } catch (error) {
+      console.error('Failed to complete onboarding', error);
+      setStatusNotice('Network issue while finalizing onboarding. Please retry.');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   const runSmartDefaults = () => {
     setProfile((current) => ({
       ...current,
@@ -300,6 +411,11 @@ export default function AdminOnboardingCopilotPage() {
 
   return (
     <div className="space-y-6">
+      {statusNotice ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
+          {statusNotice}
+        </div>
+      ) : null}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -507,14 +623,25 @@ export default function AdminOnboardingCopilotPage() {
               >
                 Previous
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveStepIndex((current) => Math.min(STEPS.length - 1, current + 1))}
-                disabled={activeStepIndex === STEPS.length - 1 || !canMoveNext}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next Step <ChevronRight className="h-4 w-4" />
-              </button>
+              {activeStepIndex < STEPS.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveStepIndex((current) => Math.min(STEPS.length - 1, current + 1))}
+                  disabled={!canMoveNext}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next Step <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={markOnboardingComplete}
+                  disabled={!canMoveNext || score < 100 || isCompleting || isCompleted}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCompleted ? 'Completed' : isCompleting ? 'Finishing...' : 'Mark Onboarding Complete'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -604,4 +731,3 @@ export default function AdminOnboardingCopilotPage() {
     </div>
   );
 }
-

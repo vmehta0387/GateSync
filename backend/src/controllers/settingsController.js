@@ -132,10 +132,34 @@ exports.updateManager = async (req, res) => {
 
 exports.getSettings = async (req, res) => {
     try {
-        const [society] = await db.query(`SELECT config_settings FROM societies WHERE id = ?`, [req.user.society_id]);
+        const [society] = await db.query(
+            `SELECT
+                s.name,
+                s.address,
+                s.society_type,
+                s.towers_count,
+                s.total_flats,
+                s.config_settings,
+                (SELECT COUNT(*) FROM gates g WHERE g.society_id = s.id) AS gates_count
+             FROM societies s
+             WHERE s.id = ?
+             LIMIT 1`,
+            [req.user.society_id]
+        );
+        const row = society[0] || null;
         return res.status(200).json({
             success: true,
-            settings: normalizeSettings(society[0]?.config_settings)
+            settings: normalizeSettings(row?.config_settings),
+            society_profile: row
+                ? {
+                    society_name: row.name || '',
+                    address: row.address || '',
+                    society_type: row.society_type || 'Apartment',
+                    towers_count: Number(row.towers_count || 0),
+                    total_flats: Number(row.total_flats || 0),
+                    gates_count: Number(row.gates_count || 0),
+                }
+                : null,
         });
     } catch (error) {
         console.error('getSettings error:', error);

@@ -10,9 +10,10 @@ interface SidebarProps {
   societyName?: string;
   isCollapsed: boolean;
   onToggle: () => void;
+  showOnboardingLink?: boolean;
 }
 
-export default function Sidebar({ role, societyName = '', isCollapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ role, societyName = '', isCollapsed, onToggle, showOnboardingLink = true }: SidebarProps) {
   const pathname = usePathname();
 
   const adminLinks = [
@@ -53,7 +54,11 @@ export default function Sidebar({ role, societyName = '', isCollapsed, onToggle 
     { name: 'Active Logs', href: '/guard/logs', icon: FileText },
   ];
 
-  const links = role === 'ADMIN' ? adminLinks : role === 'MANAGER' ? managerLinks : role === 'GUARD' ? guardLinks : residentLinks;
+  const linksBase = role === 'ADMIN' ? adminLinks : role === 'MANAGER' ? managerLinks : role === 'GUARD' ? guardLinks : residentLinks;
+  const links =
+    role === 'ADMIN' && !showOnboardingLink
+      ? linksBase.filter((link) => link.href !== '/admin/onboarding')
+      : linksBase;
 
   return (
     <div className={`${isCollapsed ? 'w-20' : 'w-64'} h-screen bg-slate-900 border-r border-slate-800 flex flex-col fixed left-0 top-0 transition-all duration-300 ease-in-out z-30 text-white`}>
