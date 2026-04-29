@@ -57,11 +57,12 @@ const INITIAL_FORM: FormState = {
   subscription_plan: 'Free',
 };
 
-export default function SocietyOnboardingPage() {
+export default function PublicOnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [planChoice, setPlanChoice] = useState<PlanChoice>('TRIAL');
   const [unitPrice, setUnitPrice] = useState(DEFAULT_UNIT_PRICE);
   const [formData, setFormData] = useState<FormState>(INITIAL_FORM);
@@ -77,7 +78,7 @@ export default function SocietyOnboardingPage() {
           setUnitPrice(perUnit);
         }
       } catch {
-        // Keep default price if network fails.
+        // Keep fallback.
       }
     };
     void fetchPlans();
@@ -102,6 +103,7 @@ export default function SocietyOnboardingPage() {
   const submit = async () => {
     setSaving(true);
     setError('');
+    setSuccess('');
 
     const payload = {
       ...formData,
@@ -112,13 +114,9 @@ export default function SocietyOnboardingPage() {
     };
 
     try {
-      const token = localStorage.getItem('gatepulse_token');
-      const response = await fetch(`${API_BASE}/superadmin/societies`, {
+      const response = await fetch(`${API_BASE}/onboarding/society`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
@@ -129,10 +127,11 @@ export default function SocietyOnboardingPage() {
       }
 
       if (!isTrial) {
-        setError('Society created. Next: open billing and complete Razorpay payment to unlock premium.');
+        setSuccess('Society created. Next step: complete Razorpay payment from premium checkout to unlock paid plan.');
       } else {
-        router.push('/superadmin/societies');
+        setSuccess('Society created successfully. Admin can now login using OTP.');
       }
+      setTimeout(() => router.push('/'), 1800);
     } catch {
       setError('Server unreachable. Please try again.');
     } finally {
@@ -151,7 +150,7 @@ export default function SocietyOnboardingPage() {
         </div>
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => router.push('/')}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -204,7 +203,6 @@ export default function SocietyOnboardingPage() {
                   onChange={(e) => update('total_flats', Math.max(1, Number(e.target.value || 1)))}
                   className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-lg font-bold text-slate-900"
                 />
-                <p className="mt-2 text-xs text-slate-500">This count drives your subscription billing.</p>
               </div>
               <div className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-slate-900">Choose Plan</p>
@@ -231,34 +229,22 @@ export default function SocietyOnboardingPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="text-sm font-semibold text-slate-700">Society Name</label>
-              <input
-                value={formData.name}
-                onChange={(e) => update('name', e.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-              />
+              <input value={formData.name} onChange={(e) => update('name', e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
             </div>
             <div className="md:col-span-2">
               <label className="text-sm font-semibold text-slate-700">Address</label>
-              <textarea
-                value={formData.address}
-                onChange={(e) => update('address', e.target.value)}
-                className="mt-2 min-h-[96px] w-full rounded-xl border border-slate-200 px-3 py-2.5"
-              />
+              <textarea value={formData.address} onChange={(e) => update('address', e.target.value)} className="mt-2 min-h-[96px] w-full rounded-xl border border-slate-200 px-3 py-2.5" />
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">Society Type</label>
-              <select
-                value={formData.society_type}
-                onChange={(e) => update('society_type', e.target.value as FormState['society_type'])}
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-              >
+              <select value={formData.society_type} onChange={(e) => update('society_type', e.target.value as FormState['society_type'])} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5">
                 <option value="Apartment">Apartment</option>
                 <option value="Villa">Villa</option>
                 <option value="Mixed">Mixed</option>
               </select>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Declared Flats (Locked)</label>
+              <label className="text-sm font-semibold text-slate-700">Declared Flats</label>
               <input value={formData.total_flats} disabled className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5" />
             </div>
           </div>
@@ -268,29 +254,15 @@ export default function SocietyOnboardingPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="text-sm font-semibold text-slate-700">Admin Name</label>
-              <input
-                value={formData.admin.name}
-                onChange={(e) => update('admin', { ...formData.admin, name: e.target.value })}
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-              />
+              <input value={formData.admin.name} onChange={(e) => update('admin', { ...formData.admin, name: e.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">Admin Email (Optional)</label>
-              <input
-                type="email"
-                value={formData.admin.email}
-                onChange={(e) => update('admin', { ...formData.admin, email: e.target.value })}
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-              />
+              <input type="email" value={formData.admin.email} onChange={(e) => update('admin', { ...formData.admin, email: e.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
             </div>
             <div>
               <label className="text-sm font-semibold text-slate-700">Admin Phone</label>
-              <input
-                value={formData.admin.phone}
-                maxLength={10}
-                onChange={(e) => update('admin', { ...formData.admin, phone: e.target.value.replace(/\D/g, '') })}
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-              />
+              <input value={formData.admin.phone} maxLength={10} onChange={(e) => update('admin', { ...formData.admin, phone: e.target.value.replace(/\D/g, '') })} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
             </div>
           </div>
         ) : null}
@@ -300,37 +272,16 @@ export default function SocietyOnboardingPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label className="text-sm font-semibold text-slate-700">Towers</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={formData.towers_count}
-                  onChange={(e) => update('towers_count', Math.max(1, Number(e.target.value || 1)))}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                />
+                <input type="number" min={1} value={formData.towers_count} onChange={(e) => update('towers_count', Math.max(1, Number(e.target.value || 1)))} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </div>
               <div>
                 <label className="text-sm font-semibold text-slate-700">Floors/Tower</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={formData.floors_per_tower}
-                  onChange={(e) => update('floors_per_tower', Math.max(1, Number(e.target.value || 1)))}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                />
+                <input type="number" min={1} value={formData.floors_per_tower} onChange={(e) => update('floors_per_tower', Math.max(1, Number(e.target.value || 1)))} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </div>
               <div>
                 <label className="text-sm font-semibold text-slate-700">Main Rule</label>
                 <label className="mt-2 flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.config_settings.visitor_approval}
-                    onChange={(e) =>
-                      update('config_settings', {
-                        ...formData.config_settings,
-                        visitor_approval: e.target.checked,
-                      })
-                    }
-                  />
+                  <input type="checkbox" checked={formData.config_settings.visitor_approval} onChange={(e) => update('config_settings', { ...formData.config_settings, visitor_approval: e.target.checked })} />
                   Visitor approval required
                 </label>
               </div>
@@ -363,11 +314,7 @@ export default function SocietyOnboardingPage() {
                   </select>
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={() => update('gates', [...formData.gates, { name: '', gate_type: 'Service' }])}
-                className="rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700"
-              >
+              <button type="button" onClick={() => update('gates', [...formData.gates, { name: '', gate_type: 'Service' }])} className="rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700">
                 + Add Gate
               </button>
             </div>
@@ -390,46 +337,23 @@ export default function SocietyOnboardingPage() {
                 <p>{isTrial ? '2-month free trial' : planChoice === 'PRO_MONTHLY' ? `₹${monthlyAmount}/month` : `₹${yearlyAmount}/year`}</p>
               </div>
             </div>
-            {!isTrial ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
-                Premium chosen: after society creation, proceed to payment to unlock premium plan.
-              </div>
-            ) : null}
           </div>
         ) : null}
 
-        {error ? (
-          <div className={`mt-5 rounded-xl px-4 py-3 text-sm ${error.includes('Society created') ? 'border border-emerald-200 bg-emerald-50 text-emerald-800' : 'border border-red-200 bg-red-50 text-red-700'}`}>
-            {error}
-          </div>
-        ) : null}
+        {error ? <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+        {success ? <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{success}</div> : null}
 
         <div className="mt-8 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setStep((prev) => Math.max(1, prev - 1))}
-            disabled={step === 1}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
-          >
+          <button type="button" onClick={() => setStep((prev) => Math.max(1, prev - 1))} disabled={step === 1} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">
             Previous
           </button>
           {step < 5 ? (
-            <button
-              type="button"
-              onClick={() => setStep((prev) => Math.min(5, prev + 1))}
-              disabled={!canContinue}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-            >
+            <button type="button" onClick={() => setStep((prev) => Math.min(5, prev + 1))} disabled={!canContinue} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
               Continue
               <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={submit}
-              disabled={saving}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
+            <button type="button" onClick={submit} disabled={saving} className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">
               {saving ? 'Creating...' : 'Create Society'}
             </button>
           )}

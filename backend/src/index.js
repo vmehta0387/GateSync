@@ -41,6 +41,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const securityRoutes = require('./routes/securityRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const publicOnboardingRoutes = require('./routes/publicOnboardingRoutes');
 
 app.use('/api/v1/superadmin', superadminRoutes);
 app.use('/api/v1/auth', authRoutes);
@@ -58,6 +59,7 @@ app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/security', securityRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/onboarding', publicOnboardingRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'GatePulse API is running' });
