@@ -22,7 +22,7 @@ import { getStoredSession, useClientReady } from '@/lib/auth';
 type SocietyProfile = {
   society_name: string;
   address: string;
-  society_type: 'Apartment' | 'GatedVilla' | 'Mixed';
+  society_type: 'Apartment' | 'Villa' | 'Mixed';
   towers_count: string;
   total_flats: string;
   gates_count: string;
@@ -102,7 +102,7 @@ const STEPS: Array<{
   helper: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { id: 'society', title: 'Society Basics', helper: 'Name, type, address', icon: Building2 },
+  { id: 'society', title: 'Verify Setup', helper: 'Pre-filled society details', icon: Building2 },
   { id: 'structure', title: 'Structure', helper: 'Towers, flats, gates', icon: DoorOpen },
   { id: 'team', title: 'Team Setup', helper: 'Admin, guards, import mode', icon: UserCog },
   { id: 'operations', title: 'Operations Rules', helper: 'Visitor and billing defaults', icon: ShieldCheck },
@@ -284,6 +284,23 @@ export default function AdminOnboardingCopilotPage() {
         }
 
         const onboarding = (data?.settings?.admin_onboarding || {}) as SavedOnboardingSettings;
+        const societyProfile = data?.society_profile || null;
+        const profileFromSociety: Partial<SocietyProfile> = societyProfile
+          ? {
+              society_name: String(societyProfile.society_name || ''),
+              address: String(societyProfile.address || ''),
+              society_type: (['Apartment', 'Villa', 'Mixed'].includes(String(societyProfile.society_type))
+                ? String(societyProfile.society_type)
+                : 'Apartment') as SocietyProfile['society_type'],
+              towers_count: String(Number(societyProfile.towers_count || 0) || ''),
+              total_flats: String(Number(societyProfile.total_flats || 0) || ''),
+              gates_count: String(Number(societyProfile.gates_count || 0) || ''),
+            }
+          : {};
+
+        if (Object.keys(profileFromSociety).length > 0) {
+          setProfile((current) => ({ ...current, ...profileFromSociety }));
+        }
         if (onboarding.profile) setProfile((current) => ({ ...current, ...onboarding.profile }));
         if (onboarding.team) setTeam((current) => ({ ...current, ...onboarding.team }));
         if (onboarding.operations) setOperations((current) => ({ ...current, ...onboarding.operations }));
@@ -466,12 +483,12 @@ export default function AdminOnboardingCopilotPage() {
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-slate-900">{activeStep.title}</h2>
-              <p className="mt-1 text-sm text-slate-500">{activeStep.helper}</p>
-            </div>
+            <h2 className="text-xl font-bold text-slate-900">{activeStep.title}</h2>
+            <p className="mt-1 text-sm text-slate-500">{activeStep.helper}</p>
+          </div>
 
-            {activeStep.id === 'society' ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {activeStep.id === 'society' ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <input
                   value={profile.society_name}
                   onChange={(e) => setProfile((c) => ({ ...c, society_name: e.target.value }))}
@@ -484,7 +501,7 @@ export default function AdminOnboardingCopilotPage() {
                   className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
                 >
                   <option value="Apartment">Apartment</option>
-                  <option value="GatedVilla">Gated Villa</option>
+                  <option value="Villa">Villa</option>
                   <option value="Mixed">Mixed</option>
                 </select>
                 <textarea
